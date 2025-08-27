@@ -1,8 +1,12 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+mod util;
+mod model;
+mod gitio;
+mod render;
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -83,10 +87,10 @@ struct Cli {
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lowercase")]
-enum Tz { Local, Utc }
+pub enum Tz { Local, Utc }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-enum Mode { Simple, Full }
+pub enum Mode { Simple, Full }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -97,7 +101,7 @@ enum WindowSpec {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct EffectiveConfig {
+pub struct EffectiveConfig {
     repo: String,           // absolute path for stability
     window: WindowSpec,
     mode: Mode,
@@ -109,16 +113,26 @@ struct EffectiveConfig {
     out: String,
     github_prs: bool,
     include_unmerged: bool,
-    tz: Tz,
+    pub tz: Tz,
 }
 
-fn canonicalize_lossy(p: &Path) -> String {
-    // Try to canonicalize; if it fails (nonexistent), join with CWD and return a string
-    std::fs::canonicalize(p)
-        .or_else(|_| Ok(env::current_dir()?.join(p)))
-        .unwrap_or_else(|_| p.to_path_buf())
-        .to_string_lossy()
-        .to_string()
+fn month_bounds(ym: &str) -> Result<(String, String)> {
+    let parts: Vec<&str> = ym.split('-').collect();
+    if parts.len() != 2 { bail!("invalid --month, expected YYYY-MM"); }
+    let y: i32 = parts[0].parse().context("parsing year in --month")?;
+    let m: i32 = parts[1].parse().context("parsing month in --month")?;
+    if m < 1 || m > 12 { bail!("invalid month in --month"); }
+    let next_y = if m == 12 { y + 1 } else { y };
+    let next_m = if m == 12 { 1 } else { m + 1 };
+    Ok((format!("{y:04}-{m:02}-01T00:00:00"), format!("{next_y:04}-{next_m:02}-01T00:00:00")))
+}
+
+pub fn compute_window_strings(cfg: &EffectiveConfig) -> Result<(String, String)> {
+    match &cfg.window {
+        WindowSpec::SinceUntil { since, until } => Ok((since.clone(), until.clone())),
+        WindowSpec::Month { ym } => month_bounds(ym),
+        WindowSpec::ForPhrase { .. } => bail!("--for phrase windows not implemented in Rust port yet; use --month or --since/--until"),
+    }
 }
 
 fn normalize(cli: Cli) -> Result<EffectiveConfig> {
@@ -145,7 +159,7 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
         eprintln!("note: --out is ignored in --full mode (writing shards + manifest)");
     }
 
-    let repo = canonicalize_lossy(&cli.repo);
+    let repo = util::canonicalize_lossy(&cli.repo);
 
     Ok(EffectiveConfig {
         repo,
@@ -154,8 +168,8 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
         include_merges: cli.include_merges,
         include_patch: cli.include_patch,
         max_patch_bytes: cli.max_patch_bytes,
-        save_patches: cli.save_patches.as_deref().map(|p| canonicalize_lossy(Path::new(p))),
-        split_out: cli.split_out.as_deref().map(|p| canonicalize_lossy(Path::new(p))),
+        save_patches: cli.save_patches.as_deref().map(|p| util::canonicalize_lossy(p)),
+        split_out: cli.split_out.as_deref().map(|p| util::canonicalize_lossy(p)),
         out: cli.out,
         github_prs: cli.github_prs,
         include_unmerged: cli.include_unmerged,
@@ -166,9 +180,39 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let cfg = normalize(cli).context("validating CLI flags")?;
-    // For now, just print the normalized config as JSON (stderr has any notes)
-    println!("{}", serde_json::to_string_pretty(&cfg)?);
-    Ok(())
+    match cfg.mode {
+        Mode::Simple => {
+            let (since, until) = compute_window_strings(&cfg)?;
+            let params = render::SimpleParams{
+                repo: cfg.repo.clone(),
+                since, until,
+                include_merges: cfg.include_merges,
+                include_patch: cfg.include_patch,
+                max_patch_bytes: cfg.max_patch_bytes,
+                tz_local: matches!(cfg.tz, Tz::Local),
+            };
+            let report = render::run_simple(&params)?;
+            if cfg.out == "-" { println!("{}", serde_json::to_string_pretty(&report)?); }
+            else { std::fs::write(&cfg.out, serde_json::to_vec_pretty(&report)?)?; }
+            Ok(())
+        }
+        Mode::Full => {
+            let (since, until) = compute_window_strings(&cfg)?;
+            let label = match &cfg.window { WindowSpec::Month{ym} => Some(ym.clone()), _ => Some("window".into()) };
+            let params = render::FullParams{
+                repo: cfg.repo.clone(),
+                label,
+                since, until,
+                include_merges: cfg.include_merges,
+                include_patch: cfg.include_patch,
+                max_patch_bytes: cfg.max_patch_bytes,
+                tz_local: matches!(cfg.tz, Tz::Local),
+                split_out: cfg.split_out.clone(),
+                include_unmerged: cfg.include_unmerged,
+            };
+            let res = render::run_full(&params)?;
+            println!("{}", serde_json::to_string_pretty(&res)?);
+            Ok(())
+        }
+    }
 }
-
-
