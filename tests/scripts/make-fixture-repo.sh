@@ -9,9 +9,10 @@ TMP=$(mktemp -d)
 
 echo "[fixtures] creating repo at: $TMP"
 cd "$TMP"
-git init -q
+git init -q -b main
 git config user.name "Fixture Bot"
 git config user.email fixture@example.com
+git config commit.gpgsign false
 
 # Commit A (on default branch)
 mkdir -p app/models
@@ -31,12 +32,13 @@ GIT_AUTHOR_DATE="2025-08-13T09:12:00" GIT_COMMITTER_DATE="2025-08-13T09:12:00" \
   git commit -q -m "refactor: extract payment service"
 B_SHA=$(git rev-parse HEAD)
 
-# Back to main for HEAD view
-git checkout -q -b main
+# Back to main for HEAD view (ensure present)
+git switch -q -C main
 
 cd "$ROOT"
-mkdir -p tests/fixtures .tmp
+mkdir -p tests/fixtures .tmp tests/.tmp
 echo "$TMP" > .tmp/tmpdir
+echo "$TMP" > tests/.tmp/tmpdir
 
 # Simple fixture (Python reference)
 python3 ./git-activity-report.py \

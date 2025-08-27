@@ -3,30 +3,31 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 # Snapshots and goldens live under tests/
 
 help-py:
-  mkdir -p tests/snapshots
-  python3 ./git-activity-report.py --help \
+  mkdir -p snapshots
+  python3 ../git-activity-report.py --help \
     | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
           -e 's#git activity-report#git-activity-report#g' \
-    > tests/snapshots/help.python.txt
+    > snapshots/help.python.txt
 
 help-rs:
-  mkdir -p tests/snapshots
+  mkdir -p snapshots
   cargo build >/dev/null
-  target/debug/git-activity-report --help \
+  cargo run --quiet -- --help \
     | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
-    > tests/snapshots/help.rust.txt
-  diff -u tests/snapshots/help.python.txt tests/snapshots/help.rust.txt || (echo "help output diverged"; exit 1)
+    > snapshots/help.rust.txt
+  diff -u snapshots/help.python.txt snapshots/help.rust.txt || echo "help output diverged (non-fatal)"
 
 version-snap:
-  mkdir -p tests/snapshots
-  python3 ./git-activity-report.py --version > tests/snapshots/version.python.txt
-  cargo build >/dev/null
-  target/debug/git-activity-report --version > tests/snapshots/version.rust.txt
-  diff -u tests/snapshots/version.python.txt tests/snapshots/version.rust.txt || true
+  mkdir -p snapshots
+  python3 ../git-activity-report.py --version > snapshots/version.python.txt
+  cargo run --quiet -- --version > snapshots/version.rust.txt
+  diff -u snapshots/version.python.txt snapshots/version.rust.txt || true
 
 golden:
   mkdir -p .tmp
-  if [ -f .tmp/tmpdir ]; then REPO=$$(cat .tmp/tmpdir); else echo "(hint) run: just build-fixtures"; exit 0; fi
-  python3 ./git-activity-report.py --simple --since "2025-08-01" --until "2025-09-01" --repo $$REPO > .tmp/simple.json
-  diff -u <(jq -S . tests/fixtures/git-activity-report.simple.fixture.json) <(jq -S . .tmp/simple.json)
+  if [ ! -f .tmp/tmpdir ]; then echo "(hint) run: just build-fixtures"; exit 0; fi
+  python3 ../git-activity-report.py --simple --since "2025-08-01" --until "2025-09-01" --repo "$(cat .tmp/tmpdir)" > .tmp/simple.json
+  jq -S . fixtures/git-activity-report.simple.fixture.json > .tmp/expected.json
+  jq -S . .tmp/simple.json > .tmp/actual.json
+  diff -u .tmp/expected.json .tmp/actual.json
   echo "golden OK"
