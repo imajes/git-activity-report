@@ -18,7 +18,7 @@ This document captures concrete next steps, with a focus on a faithful Rust port
 
 - Minimal set (already present):
 
-  - `git-activity-report.simple.v2.fixture.json`
+  - `git-activity-report.simple.fixture.json`
   - `manifest.json` (top manifest)
   - `manifest-2025-08.json` (range manifest)
   - Two commit shards: `2025.08.12-14.03-aaaaaaaaaaaa.json`, `2025.08.13-09.12-bbbbbbbbbbbb.json`
@@ -73,7 +73,7 @@ cd "$ROOT"
 mkdir -p tests/fixtures
 
 # Simple
-git activity-report --simple --since "2025-08-01" --until "2025-09-01" --repo "$TMP" > tests/fixtures/git-activity-report.simple.v2.fixture.json
+git activity-report --simple --since "2025-08-01" --until "2025-09-01" --repo "$TMP" > tests/fixtures/git-activity-report.simple.fixture.json
 
 # Full
 mkdir -p tests/fixtures/full_out
@@ -110,7 +110,7 @@ golden:
   # Example assumes tests/scripts saved TMP path to .tmp/tmpdir
   if [ -f .tmp/tmpdir ]; then REPO=$$(cat .tmp/tmpdir); else echo "(hint) run build-fixtures first"; exit 0; fi
   git activity-report --simple --since "2025-08-01" --until "2025-09-01" --repo $$REPO > .tmp/simple.json
-  diff -u <(jq -S . tests/fixtures/git-activity-report.simple.v2.fixture.json) <(jq -S . .tmp/simple.json)
+  diff -u <(jq -S . tests/fixtures/git-activity-report.simple.fixture.json) <(jq -S . .tmp/simple.json)
   echo "golden OK"
 ```
 

@@ -1,89 +1,141 @@
 # Use bash with strict flags
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
-# Project root and paths
-ROOT        := justfile_directory()
+# -------------------------------------------------------------------
+# Paths & tooling
+# -------------------------------------------------------------------
 SCHEMAS_DIR := "tests/schemas"
-FIXTURES_DIR:= "tests/fixtures"
+FIXTURES_DIR := "tests/fixtures"
 
-# AJV command: override with `just AJV=ajv validate-all` if you have it globally
-# Otherwise we'll default to an npx one-shot for zero-setup.
-AJV := "npx --yes ajv-cli --spec=draft2020"
+# Ajv CLI (Draft 2020-12)
+AJV      := "npx --yes ajv-cli"
+AJVFLAGS := "--spec=draft2020"
+
+# Optional pretty printer
 JQ := "jq"
+
+# Rust binary path
+RUST_BIN := "target/debug/git-activity-report"
 
 # -------------------------------------------------------------------
 # Help
 # -------------------------------------------------------------------
 _help:
-  @echo "Available Recipes:"
-  @echo "  validate-all                      # Validate all schemas against fixtures"
-  @echo "  validate-simple                   # Validate simple -> simple.fixture.json"
-  @echo "  validate-range                    # Validate full range manifest"
-  @echo "  validate-top                      # Validate full top manifest"
-  @echo "  validate-commit-shards            # Validate the two commit shard fixtures"
-  @echo "  validate schema data              # Validate an arbitrary pair"
-  @echo "  fmt-fixtures                      # Pretty-print fixtures in-place (requires jq)"
-  @echo "  show-env                          # Show resolved paths and tools"
+  @echo "Recipes:"
+  @echo "  validate-all                 # Validate all schemas/fixtures"
+  @echo "  validate-simple              # simple schema -> fixture"
+  @echo "  validate-range               # full range manifest"
+  @echo "  validate-top                 # full top manifest"
+  @echo "  validate-commit-shards       # validate all commit shard fixtures"
+  @echo "  validate schema data         # validate an arbitrary pair"
+  @echo "  fmt-fixtures                 # format fixtures with jq"
+  @echo "  doctor                       # show ajv + rust toolchain status"
+  @echo "  build-fixtures               # synthesize tiny repo & refresh fixtures (if script exists)"
+  @echo "  rust-build                   # cargo build"
+  @echo "  rust-test                    # cargo test"
+  @echo "  rust-fmt                     # cargo fmt --check"
+  @echo "  rust-clippy                  # cargo clippy -D warnings"
+  @echo "  rust-help                    # print Rust CLI --help (builds first)"
+  @echo "  rust-run-simple              # sample run of Rust CLI (prints normalized config)"
+  @echo "  rust-run-full                # sample full-mode run (config print for now)"
 
 # -------------------------------------------------------------------
-# One-offs
+# Validation (JSON Schema / fixtures)
 # -------------------------------------------------------------------
 
 # Generic validator: pass logical schema key and explicit data path
-# Usage: just validate simple tests/fixtures/git-activity-report.simple.fixture.json
+# Example: just validate simple tests/fixtures/git-activity-report.simple.fixture.json
 validate schema data:
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.{{schema}}.schema.json \
-                   -d {{data}}
-  @echo "✔ Validated {{data}} against {{SCHEMAS_DIR}}/git-activity-report.{{schema}}.schema.json"
+  {{AJV}} {{AJVFLAGS}} validate \
+    -s {{SCHEMAS_DIR}}/git-activity-report.{{schema}}.schema.json \
+    -d {{data}}
+  @echo "✔ {{data}} ✓"
 
-# Simple (current): timestamps include author_local/commit_local/timezone
+# Simple (current schema)
 validate-simple:
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.simple.schema.json \
-                   -d {{FIXTURES_DIR}}/git-activity-report.simple.fixture.json
+  {{AJV}} {{AJVFLAGS}} validate \
+    -s {{SCHEMAS_DIR}}/git-activity-report.simple.schema.json \
+    -d {{FIXTURES_DIR}}/git-activity-report.simple.fixture.json
   @echo "✔ simple OK"
 
-# Range manifest (full mode)
+# Full range manifest
 validate-range:
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.full.range.schema.json \
-                   -d {{FIXTURES_DIR}}/manifest-2025-08.json
+  {{AJV}} {{AJVFLAGS}} validate \
+    -s {{SCHEMAS_DIR}}/git-activity-report.full.range.schema.json \
+    -d {{FIXTURES_DIR}}/manifest-2025-08.json
   @echo "✔ range manifest OK"
 
-# Top-level multi-bucket manifest (full mode)
+# Full top manifest
 validate-top:
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.full.top.schema.json \
-                   -d {{FIXTURES_DIR}}/manifest.json
+  {{AJV}} {{AJVFLAGS}} validate \
+    -s {{SCHEMAS_DIR}}/git-activity-report.full.top.schema.json \
+    -d {{FIXTURES_DIR}}/manifest.json
   @echo "✔ top manifest OK"
 
-# Individual commit shard fixtures (validate both)
+# Validate all commit shards that look like YYYY.MM.DD-HH.MM-<sha>.json
 validate-commit-shards:
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.commit.schema.json \
-                   -d {{FIXTURES_DIR}}/2025.08.12-14.03-aaaaaaaaaaaa.json
-  {{AJV}} validate -s {{SCHEMAS_DIR}}/git-activity-report.commit.schema.json \
-                   -d {{FIXTURES_DIR}}/2025.08.13-09.12-bbbbbbbbbbbb.json
-  @echo "✔ commit shards OK (2/2)"
+  shopt -s nullglob; \
+  for f in {{FIXTURES_DIR}}/[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]-[0-9][0-9].[0-9][0-9]-*.json; do \
+    {{AJV}} {{AJVFLAGS}} validate \
+      -s {{SCHEMAS_DIR}}/git-activity-report.commit.schema.json \
+      -d "$$f"; \
+    echo "✔ $$f"; \
+  done
+  @echo "✔ commit shards OK"
 
-# All validations in a deterministic order
+# Everything
 validate-all: validate-simple validate-commit-shards validate-range validate-top
-  @echo "-----------------------------------------------"
+  @echo "---------------------------------------------"
   @echo "All validations passed ✓"
-  @echo "Schemas:  $(ls -1 {{SCHEMAS_DIR}} | wc -l)   Fixtures: $(ls -1 {{FIXTURES_DIR}} | wc -l)"
-  @echo "-----------------------------------------------"
+  @echo "Schemas:  $$(ls -1 {{SCHEMAS_DIR}}/*.json | wc -l)   Fixtures: $$(ls -1 {{FIXTURES_DIR}}/*.json | wc -l)"
+  @echo "---------------------------------------------"
 
-# Optional: Reformat fixtures (idempotent) — requires jq
 fmt-fixtures:
   if ! command -v {{JQ}} >/dev/null 2>&1; then \
-    echo "jq not found; skipping format."; exit 0; \
+    echo "jq not found; skipping"; exit 0; \
   fi
   for f in {{FIXTURES_DIR}}/*.json; do \
-    tmp="$${f}.tmp"; \
-    {{JQ}} . "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
+    tmp="$${f}.tmp"; {{JQ}} . "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
     echo "fmt: $$f"; \
   done
 
-# Utility to see what the Justfile resolves
-show-env:
-  @echo "ROOT        = {{ROOT}}"
-  @echo "SCHEMAS_DIR = {{SCHEMAS_DIR}}"
-  @echo "FIXTURES_DIR= {{FIXTURES_DIR}}"
-  @echo "AJV         = {{AJV}}"
-  @echo "JQ          = {{JQ}}"
+# If you added tests/scripts/make-fixture-repo.sh
+build-fixtures:
+  if [ -x tests/scripts/make-fixture-repo.sh ]; then \
+    bash tests/scripts/make-fixture-repo.sh; \
+  else \
+    echo "No tests/scripts/make-fixture-repo.sh found (skipping)"; \
+  fi
+
+doctor:
+  set +e
+  echo "AJV CLI:"; {{AJV}} --version || true
+  echo "Testing draft engine ..."; {{AJV}} {{AJVFLAGS}} help >/dev/null 2>&1 && echo "draft2020 OK" || echo "draft2020 NOT OK"
+  echo "Rust toolchain:"; rustup show || true
+
+# -------------------------------------------------------------------
+# Rust workflow
+# -------------------------------------------------------------------
+
+rust-build:
+  cargo build
+
+rust-test:
+  cargo test
+
+rust-fmt:
+  cargo fmt --all -- --check
+
+rust-clippy:
+  cargo clippy -- -D warnings
+
+rust-help: rust-build
+  {{RUST_BIN}} --help | sed -e 's#\\(.\\)/.*git-activity-report#git-activity-report#g'
+
+# Sample: print normalized config for a simple window
+rust-run-simple: rust-build
+  {{RUST_BIN}} --simple --for "last week" --repo . | {{JQ}} .
+
+# Sample: print normalized config for a full window
+rust-run-full: rust-build
+  {{RUST_BIN}} --full --month 2025-08 --split-out .tmp/out | {{JQ}} .
