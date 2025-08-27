@@ -1,0 +1,20 @@
+{
+  "repo": "/abs/path/to/repo",
+  "multi": true,
+  "generated_at": "2025-08-27T19:28:34+00:00",
+  "mode": "full",
+  "include_merges": false,
+  "include_patch": false,
+  "include_unmerged": true,
+  "buckets": [
+    {
+      "label": "2025-08",
+      "range": {
+        "since": "2025-08-01T00:00:00",
+        "until": "2025-09-01T00:00:00"
+      },
+      "manifest": "manifest-2025-08.json",
+      "dir": "/mnt/data/full_fixture"
+    }
+  ]
+}

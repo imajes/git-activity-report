@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/git-activity-report.commit.v2.schema.json",
+  "title": "Git Activity Report \u2014 Commit Shard (v2)",
+  "type": "object",
+  "required": [
+    "sha",
+    "short_sha",
+    "parents",
+    "author",
+    "committer",
+    "timestamps",
+    "subject",
+    "body",
+    "files",
+    "diffstat_text",
+    "patch_ref"
+  ],
+  "properties": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "short_sha": {
+      "type": "string",
+      "minLength": 7,
+      "maxLength": 20
+    },
+    "parents": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "author": {
+      "type": "object",
+      "required": [
+        "name",
+        "email",
+        "date"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "committer": {
+      "type": "object",
+      "required": [
+        "name",
+        "email",
+        "date"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timestamps": {
+      "type": "object",
+      "required": [
+        "author",
+        "commit",
+        "author_local",
+        "commit_local",
+        "timezone"
+      ],
+      "properties": {
+        "author": {
+          "type": "integer"
+        },
+        "commit": {
+          "type": "integer"
+        },
+        "author_local": {
+          "type": "string"
+        },
+        "commit_local": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string",
+          "enum": [
+            "local",
+            "utc"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "file",
+          "status"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "old_path": {
+            "type": "string"
+          },
+          "additions": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "deletions": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "diffstat_text": {
+      "type": "string"
+    },
+    "patch": {
+      "type": "string"
+    },
+    "patch_clipped": {
+      "type": "boolean"
+    },
+    "patch_ref": {
+      "type": "object",
+      "required": [
+        "embed",
+        "git_show_cmd"
+      ],
+      "properties": {
+        "embed": {
+          "type": "boolean"
+        },
+        "git_show_cmd": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "local_patch_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_diff_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_patch_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "github_prs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "number",
+          "title",
+          "state",
+          "html_url"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "merged_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "diff_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patch_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
