@@ -7,11 +7,11 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 SCHEMAS_DIR := "tests/schemas"
 FIXTURES_DIR := "tests/fixtures"
 
-# Ajv CLI (Draft 2020-12)
-AJV      := "npx --yes ajv-cli"
+# Ajv CLI (Draft 2020-12) — prefer local `ajv`
+AJV      := "ajv"
 AJVFLAGS := "--spec=draft2020"
 
-# Optional pretty printer
+# Pretty printer (required for development)
 JQ := "jq"
 
 # Rust binary path
@@ -74,13 +74,10 @@ validate-top:
 
 # Validate all commit shards that look like YYYY.MM.DD-HH.MM-<sha>.json
 validate-commit-shards:
-  shopt -s nullglob; \
-  for f in {{FIXTURES_DIR}}/[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]-[0-9][0-9].[0-9][0-9]-*.json; do \
-    {{AJV}} {{AJVFLAGS}} validate \
-      -s {{SCHEMAS_DIR}}/git-activity-report.commit.schema.json \
-      -d "$$f"; \
-    echo "✔ $$f"; \
-  done
+  # Use ajv's built-in glob expansion by quoting the pattern
+  {{AJV}} {{AJVFLAGS}} validate \
+    -s {{SCHEMAS_DIR}}/git-activity-report.commit.schema.json \
+    -d "{{FIXTURES_DIR}}/[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]-[0-9][0-9].[0-9][0-9]-*.json"
   @echo "✔ commit shards OK"
 
 # Everything
@@ -91,9 +88,6 @@ validate-all: validate-simple validate-commit-shards validate-range validate-top
   @echo "---------------------------------------------"
 
 fmt-fixtures:
-  if ! command -v {{JQ}} >/dev/null 2>&1; then \
-    echo "jq not found; skipping"; exit 0; \
-  fi
   for f in {{FIXTURES_DIR}}/*.json; do \
     tmp="$${f}.tmp"; {{JQ}} . "$$f" > "$$tmp" && mv "$$tmp" "$$f"; \
     echo "fmt: $$f"; \
@@ -109,8 +103,9 @@ build-fixtures:
 
 doctor:
   set +e
-  echo "AJV CLI:"; {{AJV}} --version || true
+  echo "AJV CLI:"; {{AJV}} help >/dev/null 2>&1 && echo "ajv OK" || echo "ajv NOT OK"
   echo "Testing draft engine ..."; {{AJV}} {{AJVFLAGS}} help >/dev/null 2>&1 && echo "draft2020 OK" || echo "draft2020 NOT OK"
+  if ! command -v {{JQ}} >/dev/null 2>&1; then echo "jq not found — please install jq"; exit 1; else echo "jq: $$(jq --version)"; fi
   echo "Rust toolchain:"; rustup show || true
 
 # -------------------------------------------------------------------

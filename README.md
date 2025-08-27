@@ -15,14 +15,20 @@ Export Git activity into structured JSON—either a single file (simple mode) or
 * **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
 * **Zero non‑stdlib deps**: requires Python 3 and Git on PATH.
 
-## Install
+## Install / Run
 
-Copy the script somewhere on your PATH (e.g., `~/bin`) and make it executable:
+- Local run (from this repo):
 
-```bash
-curl -o ~/bin/git-activity-report https://example.invalid/path/git-activity-report
-chmod +x ~/bin/git-activity-report
-```
+  ```bash
+  python3 ./git-activity-report.py --help
+  ```
+
+- Optional install (to invoke as `git activity-report ...`): place the script on your PATH as `git-activity-report` and make it executable.
+
+  ```bash
+  install -m 0755 ./git-activity-report.py ~/bin/git-activity-report
+  # now you can use: git activity-report --help
+  ```
 
 > Optional: set `GITHUB_TOKEN` or authenticate `gh` for PR enrichment.
 

@@ -221,10 +221,18 @@ Add `tests/snapshots/` and two Just recipes:
 
 ```just
 help-py:
-  python3 ~/bin/git-activity-report --help | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' > tests/snapshots/help.python.txt
+  mkdir -p tests/snapshots
+  # Use the in-repo Python reference for help output and normalize name
+  python3 ./git-activity-report.py --help \
+    | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
+          -e 's#git activity-report#git-activity-report#g' \
+    > tests/snapshots/help.python.txt
 
 help-rs:
-  target/debug/git-activity-report --help | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' > tests/snapshots/help.rust.txt
+  mkdir -p tests/snapshots
+  target/debug/git-activity-report --help \
+    | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
+    > tests/snapshots/help.rust.txt
   diff -u tests/snapshots/help.python.txt tests/snapshots/help.rust.txt || (echo "help output diverged"; exit 1)
 ```
 
@@ -232,7 +240,8 @@ You can also snapshot `--version`:
 
 ```just
 version-snap:
-  python3 ~/bin/git-activity-report --version > tests/snapshots/version.python.txt
+  mkdir -p tests/snapshots
+  python3 ./git-activity-report.py --version > tests/snapshots/version.python.txt
   target/debug/git-activity-report --version > tests/snapshots/version.rust.txt
   diff -u tests/snapshots/version.python.txt tests/snapshots/version.rust.txt || true # versions may differ
 ```
