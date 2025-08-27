@@ -1,0 +1,32 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+# Snapshots and goldens live under tests/
+
+help-py:
+  mkdir -p tests/snapshots
+  python3 ./git-activity-report.py --help \
+    | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
+          -e 's#git activity-report#git-activity-report#g' \
+    > tests/snapshots/help.python.txt
+
+help-rs:
+  mkdir -p tests/snapshots
+  cargo build >/dev/null
+  target/debug/git-activity-report --help \
+    | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
+    > tests/snapshots/help.rust.txt
+  diff -u tests/snapshots/help.python.txt tests/snapshots/help.rust.txt || (echo "help output diverged"; exit 1)
+
+version-snap:
+  mkdir -p tests/snapshots
+  python3 ./git-activity-report.py --version > tests/snapshots/version.python.txt
+  cargo build >/dev/null
+  target/debug/git-activity-report --version > tests/snapshots/version.rust.txt
+  diff -u tests/snapshots/version.python.txt tests/snapshots/version.rust.txt || true
+
+golden:
+  mkdir -p .tmp
+  if [ -f .tmp/tmpdir ]; then REPO=$$(cat .tmp/tmpdir); else echo "(hint) run: just build-fixtures"; exit 0; fi
+  python3 ./git-activity-report.py --simple --since "2025-08-01" --until "2025-09-01" --repo $$REPO > .tmp/simple.json
+  diff -u <(jq -S . tests/fixtures/git-activity-report.simple.fixture.json) <(jq -S . .tmp/simple.json)
+  echo "golden OK"
