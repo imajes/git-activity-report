@@ -124,7 +124,7 @@ git activity-report --simple --since "2 weeks ago" --until "yesterday" --repo . 
 
 ## Troubleshooting
 
-* **Schema validation fails**: confirm you used the current schema (`tests/schemas/...v2...`) and `ajv --spec=draft2020`.
+* **Schema validation fails**: confirm you used the current schema (`tests/schemas/.....`) and `ajv --spec=draft2020`.
 * **No PRs attached**: ensure `GITHUB_TOKEN` is set or `gh auth status` is valid.
 * **No unmerged commits**: verify you actually have local branches with unique commits in the window.
 * **Timestamps look wrong**: remember the ISO strings include the local offset; set `--tz utc` if you prefer UTC rendering.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/git-activity-report.simple.v2.schema.json",
+  "$id": "https://example.com/git-activity-report.simple.schema.json",
   "title": "Git Activity Report (simple mode) \u2014 v2",
   "description": "Schema for the single-JSON output produced by `git activity-report --simple` (timestamps carry local ISO strings + tz label).",
   "type": "object",

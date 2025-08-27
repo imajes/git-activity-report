@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/git-activity-report.full.top.v2.schema.json",
-  "title": "Git Activity Report \u2014 Full Mode Top Manifest (v2)",
+  "$id": "https://example.com/git-activity-report.full.top.schema.json",
+  "title": "Git Activity Report \u2014 Full Mode Top Manifest ",
   "type": "object",
   "required": [
     "repo",
