@@ -38,6 +38,7 @@ _help:
   @echo "  rust-help                    # print Rust CLI --help (builds first)"
   @echo "  rust-run-simple              # sample run of Rust CLI (prints normalized config)"
   @echo "  rust-run-full                # sample full-mode run (config print for now)"
+  @echo "  test                         # run help snapshots + golden diff"
 
 # -------------------------------------------------------------------
 # Validation (JSON Schema / fixtures)
@@ -134,3 +135,10 @@ rust-run-simple: rust-build
 # Sample: print normalized config for a full window
 rust-run-full: rust-build
   {{RUST_BIN}} --full --month 2025-08 --split-out .tmp/out | {{JQ}} .
+
+# High-level test wrapper delegating to tests/Justfile
+test: build-fixtures rust-build
+  just -f tests/Justfile help-py
+  just -f tests/Justfile help-rs
+  just -f tests/Justfile version-snap || true
+  just -f tests/Justfile golden
