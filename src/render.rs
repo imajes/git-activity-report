@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use crate::gitio;
 use crate::model::{Commit, FileEntry, PatchRef, Person, Range, SimpleReport, Summary, Timestamps, RangeManifest, ManifestItem, UnmergedActivity, BranchItems};
 use chrono::TimeZone;
@@ -48,7 +48,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
             for entry in ns {
                 let path = entry.get("file").cloned().unwrap_or_default();
                 let adds_dels = num_map.get(&path).cloned().unwrap_or((None, None));
-                let mut fe = FileEntry{
+                let fe = FileEntry{
                     file: path.clone(),
                     status: entry.get("status").cloned().unwrap_or_else(|| "M".to_string()),
                     old_path: entry.get("old_path").cloned(),
@@ -260,4 +260,16 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
     let manifest_path = format!("{}/manifest-{}.json", base, label);
     std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
     Ok(serde_json::json!({"dir": base, "manifest": format!("manifest-{}.json", label)}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shard_name_utc_has_expected_pattern() {
+        let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-10-01T00:30:00Z approx
+        assert!(name.ends_with("-abcdef123456.json"));
+        assert_eq!(name.len(), "YYYY.MM.DD-HH.MM-abcdef123456.json".len());
+    }
 }
