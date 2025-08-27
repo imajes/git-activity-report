@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/git-activity-report.full.top.v2.schema.json",
+  "title": "Git Activity Report \u2014 Full Mode Top Manifest (v2)",
+  "type": "object",
+  "required": [
+    "repo",
+    "multi",
+    "buckets",
+    "generated_at",
+    "mode",
+    "include_merges",
+    "include_patch",
+    "include_unmerged"
+  ],
+  "properties": {
+    "repo": {
+      "type": "string"
+    },
+    "multi": {
+      "type": "boolean",
+      "const": true
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "full",
+        "simple"
+      ]
+    },
+    "include_merges": {
+      "type": "boolean"
+    },
+    "include_patch": {
+      "type": "boolean"
+    },
+    "include_unmerged": {
+      "type": "boolean"
+    },
+    "buckets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "range"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "range": {
+            "type": "object",
+            "required": [
+              "since",
+              "until"
+            ],
+            "properties": {
+              "since": {
+                "type": "string"
+              },
+              "until": {
+                "type": "string"
+              }
+            }
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
