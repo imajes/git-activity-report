@@ -1,0 +1,27 @@
+# Build artifacts
+/target/
+
+# Local temp and outputs
+/.tmp/
+/out/
+/dist/
+
+# Test fixtures and temp
+/tests/.tmp/
+/tests/snapshots/
+/tests/tests/
+/tests/fixtures/full_out/
+
+# OS/editor cruft
+.DS_Store
+*.swp
+*.swo
+
+# Python caches/venvs
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+
+# Node
+node_modules/
