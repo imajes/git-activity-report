@@ -1,5 +1,10 @@
 use crate::util::run_git;
 use anyhow::Result;
+use std::collections::HashMap;
+
+type FileStat = (String, Option<i64>, Option<i64>);
+type NumStatMap = HashMap<String, (Option<i64>, Option<i64>)>;
+type NumStats = (Vec<FileStat>, NumStatMap);
 
 pub fn rev_list(repo: &str, since: &str, until: &str, include_merges: bool) -> Result<Vec<String>> {
   let mut args: Vec<String> = vec![
@@ -76,13 +81,7 @@ pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
   })
 }
 
-pub fn commit_numstat(
-  repo: &str,
-  sha: &str,
-) -> Result<(
-  Vec<(String, Option<i64>, Option<i64>)>,
-  std::collections::HashMap<String, (Option<i64>, Option<i64>)>,
-)> {
+pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
   let args: Vec<String> = vec![
     "show".into(),
     "--numstat".into(),
@@ -92,7 +91,7 @@ pub fn commit_numstat(
   ];
   let out = run_git(repo, &args)?;
   let mut files = Vec::new();
-  let mut map = std::collections::HashMap::new();
+  let mut map: NumStatMap = HashMap::new();
   for line in out.lines() {
     let parts: Vec<&str> = line.split('\t').collect();
     if parts.len() != 3 {
@@ -180,7 +179,7 @@ pub fn commit_patch(repo: &str, sha: &str) -> Result<String> {
 }
 
 pub fn current_branch(repo: &str) -> Result<Option<String>> {
-  let out = run_git(repo, &vec!["rev-parse".into(), "--abbrev-ref".into(), "HEAD".into()])?;
+  let out = run_git(repo, &["rev-parse".into(), "--abbrev-ref".into(), "HEAD".into()])?;
   let name = out.trim();
   if name == "HEAD" {
     Ok(None)
@@ -192,7 +191,7 @@ pub fn current_branch(repo: &str) -> Result<Option<String>> {
 pub fn list_local_branches(repo: &str) -> Result<Vec<String>> {
   let out = run_git(
     repo,
-    &vec![
+    &[
       "for-each-ref".into(),
       "refs/heads".into(),
       "--format=%(refname:short)".into(),
@@ -211,14 +210,14 @@ pub fn list_local_branches(repo: &str) -> Result<Vec<String>> {
 pub fn branch_ahead_behind(repo: &str, branch: &str) -> Result<(Option<i64>, Option<i64>)> {
   let out = run_git(
     repo,
-    &vec![
+    &[
       "rev-list".into(),
       "--left-right".into(),
       "--count".into(),
       format!("HEAD...{}", branch),
     ],
   )?;
-  let parts: Vec<&str> = out.trim().split_whitespace().collect();
+  let parts: Vec<&str> = out.split_whitespace().collect();
   if parts.len() == 2 {
     Ok((parts[0].parse::<i64>().ok(), parts[1].parse::<i64>().ok()))
   } else {
