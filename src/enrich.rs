@@ -3,7 +3,7 @@ use crate::util::run_git;
 use anyhow::Result;
 
 fn parse_origin_github(repo: &str) -> Option<(String, String)> {
-  if let Ok(url) = run_git(repo, &vec!["config".into(), "--get".into(), "remote.origin.url".into()]) {
+  if let Ok(url) = run_git(repo, &["config".into(), "--get".into(), "remote.origin.url".into()]) {
     let u = url.trim();
     let re1 = regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").unwrap();
     if let Some(c) = re1.captures(u) {

@@ -445,7 +445,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
           commit_local: iso_in_tz(meta.ct, p.tz_local),
           timezone: if p.tz_local { "local".into() } else { "utc".into() },
         };
-        let mut patch_ref = PatchRef {
+        let patch_ref = PatchRef {
           embed: p.include_patch,
           git_show_cmd: vec![
             "git".into(),

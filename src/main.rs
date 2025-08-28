@@ -130,7 +130,7 @@ fn month_bounds(ym: &str) -> Result<(String, String)> {
   }
   let y: i32 = parts[0].parse().context("parsing year in --month")?;
   let m: i32 = parts[1].parse().context("parsing month in --month")?;
-  if m < 1 || m > 12 {
+  if !(1..=12).contains(&m) {
     bail!("invalid month in --month");
   }
   let next_y = if m == 12 { y + 1 } else { y };
@@ -189,8 +189,8 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     include_merges: cli.include_merges,
     include_patch: cli.include_patch,
     max_patch_bytes: cli.max_patch_bytes,
-    save_patches: cli.save_patches.as_deref().map(|p| util::canonicalize_lossy(p)),
-    split_out: cli.split_out.as_deref().map(|p| util::canonicalize_lossy(p)),
+    save_patches: cli.save_patches.as_deref().map(util::canonicalize_lossy),
+    split_out: cli.split_out.as_deref().map(util::canonicalize_lossy),
     out: cli.out,
     github_prs: cli.github_prs,
     include_unmerged: cli.include_unmerged,
