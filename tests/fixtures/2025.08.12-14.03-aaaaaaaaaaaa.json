@@ -3,13 +3,13 @@
   "short_sha": "aaaaaaaaaaaa",
   "parents": [],
   "author": {
-    "name": "James Cox",
-    "email": "james@example.com",
+    "name": "Fixture Bot",
+    "email": "fixture@example.com",
     "date": "2025-08-27T18:28:34+00:00"
   },
   "committer": {
-    "name": "James Cox",
-    "email": "james@example.com",
+    "name": "Fixture Bot",
+    "email": "fixture@example.com",
     "date": "2025-08-27T19:28:34+00:00"
   },
   "timestamps": {

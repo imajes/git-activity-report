@@ -40,32 +40,20 @@ mkdir -p tests/fixtures .tmp tests/.tmp
 echo "$TMP" > .tmp/tmpdir
 echo "$TMP" > tests/.tmp/tmpdir
 
-# Simple fixture (Python reference)
+# Simple JSON into a temp staging area (do not overwrite committed fixtures)
+OUTTMP=tests/.tmp/out
+mkdir -p "$OUTTMP"
 python3 ./git-activity-report.py \
   --simple \
   --since "2025-08-01" --until "2025-09-01" \
-  --repo "$TMP" > tests/fixtures/git-activity-report.simple.fixture.json
+  --repo "$TMP" > "$OUTTMP/git-activity-report.simple.json"
 
-# Full fixtures into a staging dir, then copy interesting files
-OUTDIR=tests/fixtures/full_out
+# Full output into a temp staging dir
+OUTDIR=tests/.tmp/full_out
 mkdir -p "$OUTDIR"
 python3 ./git-activity-report.py \
   --full \
   --since "2025-08-01" --until "2025-09-01" \
   --repo "$TMP" --split-out "$OUTDIR" --include-unmerged > /dev/null
-
-cp "$OUTDIR/manifest.json" tests/fixtures/ || true
-cp "$OUTDIR/manifest-2025-08.json" tests/fixtures/ || true
-
-# Copy one HEAD shard and one unmerged shard to stable filenames for examples
-HEAD_SHARD=$(ls "$OUTDIR/2025-08/2025.08.12-14.03-"*.json 2>/dev/null | head -n 1 || true)
-UNMERGED_SHARD=$(ls "$OUTDIR/2025-08/unmerged/"*/2025.08.13-09.12-*.json 2>/dev/null | head -n 1 || true)
-
-if [[ -f "$HEAD_SHARD" ]]; then
-  cp "$HEAD_SHARD" tests/fixtures/2025.08.12-14.03-aaaaaaaaaaaa.json
-fi
-if [[ -f "$UNMERGED_SHARD" ]]; then
-  cp "$UNMERGED_SHARD" tests/fixtures/2025.08.13-09.12-bbbbbbbbbbbb.json
-fi
 
 echo "Fixture repo at: $TMP (A=$A_SHA B=$B_SHA)"

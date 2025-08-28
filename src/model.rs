@@ -45,6 +45,7 @@ pub struct Commit {
     pub patch_ref: PatchRef,
     #[serde(skip_serializing_if = "Option::is_none")] pub patch: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] pub patch_clipped: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub github_prs: Option<Vec<GithubPr>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,6 +66,24 @@ pub struct SimpleReport {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Range { pub since: String, pub until: String }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GithubUser { #[serde(skip_serializing_if = "Option::is_none")] pub login: Option<String> }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GithubPr {
+    pub number: i64,
+    pub title: String,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")] pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub merged_at: Option<String>,
+    pub html_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")] pub diff_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub patch_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub user: Option<GithubUser>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub head: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub base: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ManifestItem { pub sha: String, pub file: String, pub subject: String }
