@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
 use crate::gitio;
 use crate::model::{Commit, FileEntry, PatchRef, Person, Range, SimpleReport, Summary, Timestamps, RangeManifest, ManifestItem, UnmergedActivity, BranchItems};
+use crate::enrich;
 use chrono::TimeZone;
 
 #[derive(Debug)]
@@ -13,6 +14,8 @@ pub struct SimpleParams {
     pub include_patch: bool,
     pub max_patch_bytes: usize,
     pub tz_local: bool,
+    pub save_patches_dir: Option<String>,
+    pub github_prs: bool,
 }
 
 fn short_sha(full: &str) -> String { full.chars().take(12).collect() }
@@ -80,7 +83,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
             commit_local: iso_in_tz(meta.ct, p.tz_local),
             timezone: tz_label.to_string(),
         };
-        let patch_ref = PatchRef{
+        let mut patch_ref = PatchRef{
             embed: p.include_patch,
             git_show_cmd: vec!["git".into(), "show".into(), "--patch".into(), "--format=".into(), "--no-color".into(), meta.sha.clone()],
             local_patch_file: None,
@@ -98,9 +101,10 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
             body: meta.body,
             files,
             diffstat_text: shortstat,
-            patch_ref,
+            patch_ref: patch_ref.clone(),
             patch: None,
             patch_clipped: None,
+            github_prs: None,
         };
         if p.include_patch {
             let txt = gitio::commit_patch(&repo, sha)?;
@@ -114,6 +118,27 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
                     while end > 0 && (bytes[end-1] & 0b1100_0000) == 0b1000_0000 { end -= 1; }
                     commit.patch = Some(String::from_utf8_lossy(&bytes[..end]).to_string());
                     commit.patch_clipped = Some(true);
+                }
+            }
+        }
+
+        if let Some(dir) = &p.save_patches_dir {
+            std::fs::create_dir_all(dir)?;
+            let path = format!("{}/{}.patch", dir, commit.short_sha);
+            let txt = gitio::commit_patch(&repo, sha)?;
+            std::fs::write(&path, txt)?;
+            patch_ref.local_patch_file = Some(path.clone());
+            commit.patch_ref.local_patch_file = Some(path);
+        }
+
+        if p.github_prs {
+            if let Ok(prs) = enrich::try_fetch_prs(&repo, &meta.sha) {
+                if !prs.is_empty() {
+                    patch_ref.github_diff_url = prs[0].diff_url.clone();
+                    patch_ref.github_patch_url = prs[0].patch_url.clone();
+                    commit.github_prs = Some(prs);
+                    commit.patch_ref.github_diff_url = patch_ref.github_diff_url.clone();
+                    commit.patch_ref.github_patch_url = patch_ref.github_patch_url.clone();
                 }
             }
         }
@@ -147,6 +172,8 @@ pub struct FullParams {
     pub tz_local: bool,
     pub split_out: Option<String>,
     pub include_unmerged: bool,
+    pub save_patches: bool,
+    pub github_prs: bool,
 }
 
 fn format_shard_name(epoch: i64, short_sha: &str, tz_local: bool) -> String {
@@ -195,13 +222,23 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
         let author_key = format!("{} <{}>", meta.author_name, meta.author_email);
         *authors.entry(author_key).or_insert(0) += 1;
         let timestamps = Timestamps{ author: meta.at, commit: meta.ct, author_local: iso_in_tz(meta.at, p.tz_local), commit_local: iso_in_tz(meta.ct, p.tz_local), timezone: if p.tz_local {"local".into()} else {"utc".into()} };
-        let patch_ref = PatchRef{ embed: p.include_patch, git_show_cmd: vec!["git".into(), "show".into(), "--patch".into(), "--format=".into(), "--no-color".into(), meta.sha.clone()], local_patch_file: None, github_diff_url: None, github_patch_url: None };
-        let mut commit = Commit{ sha: meta.sha.clone(), short_sha: short_sha(&meta.sha), parents: meta.parents.clone(), author: Person{ name: meta.author_name, email: meta.author_email, date: meta.author_date }, committer: Person{ name: meta.committer_name, email: meta.committer_email, date: meta.committer_date }, timestamps, subject: meta.subject, body: meta.body, files, diffstat_text: shortstat, patch_ref, patch: None, patch_clipped: None };
+        let mut patch_ref = PatchRef{ embed: p.include_patch, git_show_cmd: vec!["git".into(), "show".into(), "--patch".into(), "--format=".into(), "--no-color".into(), meta.sha.clone()], local_patch_file: None, github_diff_url: None, github_patch_url: None };
+        let mut commit = Commit{ sha: meta.sha.clone(), short_sha: short_sha(&meta.sha), parents: meta.parents.clone(), author: Person{ name: meta.author_name, email: meta.author_email, date: meta.author_date }, committer: Person{ name: meta.committer_name, email: meta.committer_email, date: meta.committer_date }, timestamps, subject: meta.subject, body: meta.body, files, diffstat_text: shortstat, patch_ref: patch_ref.clone(), patch: None, patch_clipped: None, github_prs: None };
         if p.include_patch {
             let txt = gitio::commit_patch(&p.repo, sha)?;
             if p.max_patch_bytes == 0 { commit.patch = Some(txt); commit.patch_clipped = Some(false); }
             else { let bytes = txt.as_bytes(); if bytes.len() <= p.max_patch_bytes { commit.patch = Some(txt); commit.patch_clipped = Some(false); } else { let mut end = p.max_patch_bytes; while end>0 && (bytes[end-1]&0b1100_0000)==0b1000_0000 { end-=1; } commit.patch = Some(String::from_utf8_lossy(&bytes[..end]).to_string()); commit.patch_clipped = Some(true); } }
         }
+        if p.save_patches {
+            let patch_dir = format!("{}/patches", subdir);
+            std::fs::create_dir_all(&patch_dir)?;
+            let path = format!("{}/{}.patch", patch_dir, commit.short_sha);
+            let txt = gitio::commit_patch(&p.repo, sha)?;
+            std::fs::write(&path, txt)?;
+            patch_ref.local_patch_file = Some(path.clone());
+            commit.patch_ref.local_patch_file = Some(path);
+        }
+        if p.github_prs { if let Ok(prs) = enrich::try_fetch_prs(&p.repo, &meta.sha) { if !prs.is_empty() { patch_ref.github_diff_url = prs[0].diff_url.clone(); patch_ref.github_patch_url = prs[0].patch_url.clone(); commit.github_prs = Some(prs.clone()); commit.patch_ref.github_diff_url = prs[0].diff_url.clone(); commit.patch_ref.github_patch_url = prs[0].patch_url.clone(); } } }
         let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
         let shard_path = format!("{}/{}", subdir, fname);
         std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
@@ -231,8 +268,16 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
                     for entry in ns { let path = entry.get("file").cloned().unwrap_or_default(); let adds_dels = num_map.get(&path).cloned().unwrap_or((None,None)); files.push(FileEntry{ file: path.clone(), status: entry.get("status").cloned().unwrap_or_else(||"M".into()), old_path: entry.get("old_path").cloned(), additions: adds_dels.0, deletions: adds_dels.1 }); }
                 } else { for (path,a,d) in num_list { files.push(FileEntry{ file: path.clone(), status: "M".into(), old_path: None, additions: a, deletions: d }); } }
                 let timestamps = Timestamps{ author: meta.at, commit: meta.ct, author_local: iso_in_tz(meta.at, p.tz_local), commit_local: iso_in_tz(meta.ct, p.tz_local), timezone: if p.tz_local {"local".into()} else {"utc".into()} };
-                let patch_ref = PatchRef{ embed: p.include_patch, git_show_cmd: vec!["git".into(), "show".into(), "--patch".into(), "--format=".into(), "--no-color".into(), meta.sha.clone()], local_patch_file: None, github_diff_url: None, github_patch_url: None };
-                let commit = Commit{ sha: meta.sha.clone(), short_sha: short_sha(&meta.sha), parents: meta.parents.clone(), author: Person{ name: meta.author_name, email: meta.author_email, date: meta.author_date }, committer: Person{ name: meta.committer_name, email: meta.committer_email, date: meta.committer_date }, timestamps, subject: meta.subject, body: meta.body, files, diffstat_text: shortstat, patch_ref, patch: None, patch_clipped: None };
+                let mut patch_ref = PatchRef{ embed: p.include_patch, git_show_cmd: vec!["git".into(), "show".into(), "--patch".into(), "--format=".into(), "--no-color".into(), meta.sha.clone()], local_patch_file: None, github_diff_url: None, github_patch_url: None };
+                let mut commit = Commit{ sha: meta.sha.clone(), short_sha: short_sha(&meta.sha), parents: meta.parents.clone(), author: Person{ name: meta.author_name, email: meta.author_email, date: meta.author_date }, committer: Person{ name: meta.committer_name, email: meta.committer_email, date: meta.committer_date }, timestamps, subject: meta.subject, body: meta.body, files, diffstat_text: shortstat, patch_ref: patch_ref.clone(), patch: None, patch_clipped: None, github_prs: None };
+                if p.save_patches {
+                    let patch_dir = format!("{}/patches", br_dir);
+                    std::fs::create_dir_all(&patch_dir)?;
+                    let path = format!("{}/{}.patch", patch_dir, commit.short_sha);
+                    let txt = gitio::commit_patch(&p.repo, sha)?;
+                    std::fs::write(&path, txt)?;
+                    commit.patch_ref.local_patch_file = Some(path);
+                }
                 let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
                 let shard_path = format!("{}/{}", br_dir, fname);
                 std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;

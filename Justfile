@@ -142,3 +142,5 @@ test: build-fixtures rust-build
   just -f tests/Justfile help-rs
   just -f tests/Justfile version-snap || true
   just -f tests/Justfile golden
+  just -f tests/Justfile golden-rs
+  just -f tests/Justfile validate-rs-full

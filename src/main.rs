@@ -7,6 +7,7 @@ mod util;
 mod model;
 mod gitio;
 mod render;
+mod enrich;
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -190,6 +191,8 @@ fn main() -> Result<()> {
                 include_patch: cfg.include_patch,
                 max_patch_bytes: cfg.max_patch_bytes,
                 tz_local: matches!(cfg.tz, Tz::Local),
+                save_patches_dir: cfg.save_patches.clone(),
+                github_prs: cfg.github_prs,
             };
             let report = render::run_simple(&params)?;
             if cfg.out == "-" { println!("{}", serde_json::to_string_pretty(&report)?); }
@@ -209,6 +212,8 @@ fn main() -> Result<()> {
                 tz_local: matches!(cfg.tz, Tz::Local),
                 split_out: cfg.split_out.clone(),
                 include_unmerged: cfg.include_unmerged,
+                save_patches: cfg.save_patches.is_some(),
+                github_prs: cfg.github_prs,
             };
             let res = render::run_full(&params)?;
             println!("{}", serde_json::to_string_pretty(&res)?);

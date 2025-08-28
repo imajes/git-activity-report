@@ -1,56 +1,54 @@
 {
-  "label": "window",
+  "repo": "/abs/path/to/repo",
+  "mode": "simple",
   "range": {
-    "since": "2025-08-01",
-    "until": "2025-09-01"
+    "since": "2025-08-01T00:00:00",
+    "until": "2025-09-01T00:00:00"
   },
-  "repo": "/var/folders/mf/__7dr9gx3xl2nq0j6md_8c500000gn/T/tmp.v1XP2fbfXG",
   "include_merges": false,
   "include_patch": false,
-  "mode": "simple",
-  "count": 2,
+  "count": 1,
   "authors": {
-    "Fixture Bot <fixture@example.com>": 2
+    "Fixture Bot <fixture@example.com>": 1
   },
   "summary": {
-    "additions": 3,
-    "deletions": 0,
-    "files_touched": 3
+    "additions": 12,
+    "deletions": 2,
+    "files_touched": 1
   },
-  "items": [],
   "commits": [
     {
-      "sha": "2103643d4259f2aa9481f05a865d47b41f82524a",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "short_sha": "aaaaaaaaaaaa",
       "parents": [],
       "author": {
         "name": "Fixture Bot",
         "email": "fixture@example.com",
-        "date": "2025-08-12T14:03:00-05:00"
+        "date": "2025-08-27T18:20:58+00:00"
       },
       "committer": {
         "name": "Fixture Bot",
         "email": "fixture@example.com",
-        "date": "Tue, 12 Aug 2025 14:03:00 -0500"
+        "date": "2025-08-27T19:20:58+00:00"
       },
       "timestamps": {
-        "author": 1755025380,
-        "commit": 1755025380,
-        "author_local": "2025-08-12T14:03:00-05:00",
-        "commit_local": "2025-08-12T14:03:00-05:00",
+        "author": 1756318858,
+        "commit": 1756322458,
+        "author_local": "2025-08-27T18:20:58+00:00",
+        "commit_local": "2025-08-27T19:20:58+00:00",
         "timezone": "local"
       },
-      "subject": "feat: add user model",
-      "body": "",
-      "short_sha": "2103643d4259",
+      "subject": "Implement feature X",
+      "body": "Added user onboarding logic and tests.",
       "files": [
         {
           "file": "app/models/user.rb",
-          "status": "A",
-          "additions": 1,
-          "deletions": 0
+          "status": "M",
+          "additions": 12,
+          "deletions": 2
         }
       ],
-      "diffstat_text": "1 file changed, 1 insertion(+)",
+      "diffstat_text": "1 file changed, 12 insertions(+), 2 deletions(-)",
       "patch_ref": {
         "embed": false,
         "git_show_cmd": [
@@ -59,62 +57,7 @@
           "--patch",
           "--format=",
           "--no-color",
-          "2103643d4259f2aa9481f05a865d47b41f82524a"
-        ],
-        "local_patch_file": null,
-        "github_diff_url": null,
-        "github_patch_url": null
-      }
-    },
-    {
-      "sha": "466ad005070a211109a3ea8584eb5280da4daaad",
-      "parents": [
-        "2103643d4259f2aa9481f05a865d47b41f82524a"
-      ],
-      "author": {
-        "name": "Fixture Bot",
-        "email": "fixture@example.com",
-        "date": "2025-08-13T09:12:00-05:00"
-      },
-      "committer": {
-        "name": "Fixture Bot",
-        "email": "fixture@example.com",
-        "date": "Wed, 13 Aug 2025 09:12:00 -0500"
-      },
-      "timestamps": {
-        "author": 1755094320,
-        "commit": 1755094320,
-        "author_local": "2025-08-13T09:12:00-05:00",
-        "commit_local": "2025-08-13T09:12:00-05:00",
-        "timezone": "local"
-      },
-      "subject": "refactor: extract payment service",
-      "body": "",
-      "short_sha": "466ad005070a",
-      "files": [
-        {
-          "file": "app/services/payment_service.rb",
-          "status": "A",
-          "additions": 1,
-          "deletions": 0
-        },
-        {
-          "file": "spec/services/payment_service_spec.rb",
-          "status": "A",
-          "additions": 1,
-          "deletions": 0
-        }
-      ],
-      "diffstat_text": "2 files changed, 2 insertions(+)",
-      "patch_ref": {
-        "embed": false,
-        "git_show_cmd": [
-          "git",
-          "show",
-          "--patch",
-          "--format=",
-          "--no-color",
-          "466ad005070a211109a3ea8584eb5280da4daaad"
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ],
         "local_patch_file": null,
         "github_diff_url": null,
