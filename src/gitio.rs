@@ -47,6 +47,36 @@ pub struct Meta {
   pub body: String,
 }
 
+// Mapping for the NUL (\0) separated pretty-format used in `commit_meta`.
+//
+// fmt = "%H%x00%P%x00%an%x00%ae%x00%ad%x00%cN%x00%cE%x00%cD%x00%at%x00%ct%x00%s%x00%b"
+//
+// Indices:
+//   0 -> %H   full commit SHA (40 hex chars)
+//   1 -> %P   parent SHAs (space-separated; may be empty)
+//   2 -> %an  author name
+//   3 -> %ae  author email
+//   4 -> %ad  author date (formatted per --date)
+//   5 -> %cN  committer name
+//   6 -> %cE  committer email
+//   7 -> %cD  committer date (RFC2822 when --date=iso-strict for %ad only)
+//   8 -> %at  author timestamp (epoch seconds, UTC)
+//   9 -> %ct  committer timestamp (epoch seconds, UTC)
+//  10 -> %s   subject (first line / first sentence of commit message)
+//  11 -> %b   body (rest of message, can be multi-line; may be empty)
+const IDX_H: usize = 0;
+const IDX_P: usize = 1;
+const IDX_AN: usize = 2;
+const IDX_AE: usize = 3;
+const IDX_AD: usize = 4;
+const IDX_CN: usize = 5;
+const IDX_CE: usize = 6;
+const IDX_CD: usize = 7;
+const IDX_AT: usize = 8;
+const IDX_CT: usize = 9;
+const IDX_S: usize = 10;
+const IDX_B: usize = 11;
+
 pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
   let fmt = "%H%x00%P%x00%an%x00%ae%x00%ad%x00%cN%x00%cE%x00%cD%x00%at%x00%ct%x00%s%x00%b";
   let args: Vec<String> = vec![
@@ -59,25 +89,26 @@ pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
   let out = run_git(repo, &args)?;
   let parts: Vec<&str> = out.split('\u{0}').collect();
   let get = |i: usize| -> String { parts.get(i).unwrap_or(&"").to_string() };
-  let at: i64 = get(9).parse().unwrap_or(0);
-  let ct: i64 = get(10).parse().unwrap_or(0);
+  // See index mapping above for details on each field.
+  let at: i64 = get(IDX_AT).parse().unwrap_or(0);
+  let ct: i64 = get(IDX_CT).parse().unwrap_or(0);
   Ok(Meta {
-    sha: get(0),
-    parents: if get(1).is_empty() {
+    sha: get(IDX_H),
+    parents: if get(IDX_P).is_empty() {
       vec![]
     } else {
-      get(1).split_whitespace().map(|s| s.to_string()).collect()
+      get(IDX_P).split_whitespace().map(|s| s.to_string()).collect()
     },
-    author_name: get(2),
-    author_email: get(3),
-    author_date: get(4),
-    committer_name: get(5),
-    committer_email: get(6),
-    committer_date: get(7),
+    author_name: get(IDX_AN),
+    author_email: get(IDX_AE),
+    author_date: get(IDX_AD),
+    committer_name: get(IDX_CN),
+    committer_email: get(IDX_CE),
+    committer_date: get(IDX_CD),
     at,
     ct,
-    subject: get(11),
-    body: get(12),
+    subject: get(IDX_S),
+    body: get(IDX_B),
   })
 }
 
