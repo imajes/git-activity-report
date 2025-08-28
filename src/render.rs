@@ -108,6 +108,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
         "--no-color".into(),
         meta.sha.clone(),
       ],
+      git_show_cmd_str: format!("git show --patch --format= --no-color {}", meta.sha),
       local_patch_file: None,
       github_diff_url: None,
       github_patch_url: None,
@@ -135,6 +136,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       patch: None,
       patch_clipped: None,
       github_prs: None,
+      body_lines: None,
     };
     if p.include_patch {
       let txt = gitio::commit_patch(&repo, sha)?;
@@ -179,6 +181,9 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       }
     }
 
+    if !commit.body.is_empty() {
+      commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect());
+    }
     commits.push(commit);
   }
 
@@ -309,6 +314,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
         "--no-color".into(),
         meta.sha.clone(),
       ],
+      git_show_cmd_str: format!("git show --patch --format= --no-color {}", meta.sha),
       local_patch_file: None,
       github_diff_url: None,
       github_patch_url: None,
@@ -336,6 +342,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
       patch: None,
       patch_clipped: None,
       github_prs: None,
+      body_lines: None,
     };
     if p.include_patch {
       let txt = gitio::commit_patch(&p.repo, sha)?;
@@ -379,6 +386,9 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
     }
     let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
     let shard_path = format!("{}/{}", subdir, fname);
+    if !commit.body.is_empty() {
+      commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect());
+    }
     std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
     items.push(ManifestItem {
       sha: commit.sha.clone(),
@@ -455,6 +465,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
             "--no-color".into(),
             meta.sha.clone(),
           ],
+          git_show_cmd_str: format!("git show --patch --format= --no-color {}", meta.sha),
           local_patch_file: None,
           github_diff_url: None,
           github_patch_url: None,
@@ -482,6 +493,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
           patch: None,
           patch_clipped: None,
           github_prs: None,
+          body_lines: None,
         };
         if p.save_patches {
           let patch_dir = format!("{}/patches", br_dir);
@@ -493,6 +505,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
         }
         let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
         let shard_path = format!("{}/{}", br_dir, fname);
+        if !commit.body.is_empty() { commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect()); }
         std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
         br_items.push(ManifestItem {
           sha: commit.sha.clone(),

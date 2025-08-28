@@ -63,3 +63,7 @@ validate-rs-full:
     ajv --spec=draft2020 validate -s schemas/git-activity-report.commit.schema.json -d ".tmp/rs_full/window/unmerged/*/*.json"; \
   fi
   echo "validate-rs-full OK"
+
+# Compare outputs from Python and Rust folders (simple or full)
+compare-folders py rs mode="auto":
+  bash tests/scripts/compare-outputs.sh {{py}} {{rs}} {{mode}}

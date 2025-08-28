@@ -32,11 +32,9 @@ pub struct FileEntry {
 pub struct PatchRef {
   pub embed: bool,
   pub git_show_cmd: Vec<String>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  pub git_show_cmd_str: String,
   pub local_patch_file: Option<String>,
-  #[serde(skip_serializing_if = "Option::is_none")]
   pub github_diff_url: Option<String>,
-  #[serde(skip_serializing_if = "Option::is_none")]
   pub github_patch_url: Option<String>,
 }
 
@@ -59,6 +57,8 @@ pub struct Commit {
   pub patch_clipped: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub github_prs: Option<Vec<GithubPr>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub body_lines: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
