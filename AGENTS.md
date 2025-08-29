@@ -61,6 +61,13 @@ just doctor                    # tooling sanity
 - Error handling: prefer `anyhow`/`thiserror` patterns if introduced; otherwise `Result<T, E>` with context.
 - Keep JSON field shapes **identical** to Python Schema v2.
 
+### Spacing & Readability
+
+- Follow `SPACING.md` for human‑friendly blank‑line spacing. Apply it during edits — not as a post‑hoc tool — so it “just happens”.
+- Key rule: add a blank line between declaration/setup and the next control‑flow statement. Do not split `} else {}` or `else if` chains.
+- Keep doc comments and attribute stacks directly attached to their items.
+
+
 **Naming patterns**:
 
 - Shards: `YYYY.MM.DD-HH.MM-<shortsha>.json`
@@ -71,6 +78,12 @@ just doctor                    # tooling sanity
 - Schemas: JSON Schema Draft 2020‑12, validated with `ajv-cli` (we invoke with `--spec=draft2020`).
 - Fixtures: live in `tests/fixtures/`; keep them small and deterministic.
 - Add edge cases (renames `R###`, merges if `--include-merges`, clipped patches when `--max-patch-bytes > 0`).
+
+## Workflow Checklist (Preflight)
+
+- Run `just doctor` and schema validations (`just validate-all`).
+- Build, clippy (`-D warnings`), and tests.
+- Manual spacing pass per `SPACING.md` on any touched files (Rust, Python, Justfiles).
 
 ## Commit & Pull Request Guidelines
 
