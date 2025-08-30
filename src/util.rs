@@ -46,3 +46,5 @@ pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
     dt.to_rfc3339_opts(SecondsFormat::Secs, true)
   }
 }
+
+// JSON extension helpers are in `crate::ext::serde_json`.

@@ -154,6 +154,7 @@ pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
     map.insert(path.clone(), (a, d));
     files.push((path, a, d));
   }
+
   Ok((files, map))
 }
 
@@ -210,6 +211,7 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
       res.push(m);
     }
   }
+
   Ok(res)
 }
 
@@ -226,6 +228,7 @@ pub fn commit_shortstat(repo: &str, sha: &str) -> Result<String> {
   let out = run_git(repo, &args)?;
 
   let s = out.lines().last().unwrap_or("").trim().to_string();
+
   Ok(s)
 }
 
@@ -339,6 +342,7 @@ pub fn unmerged_commits_in_range(
   }
 
   let out = run_git(repo, &args)?;
+
   Ok(
     out
       .lines()

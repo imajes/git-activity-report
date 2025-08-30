@@ -163,6 +163,24 @@ R‑L13 Orchestrator Pipelines (Phases)
   4. Final assembly and return
 - MUST NOT interleave unrelated concerns; do not write while still building core values.
 
+R‑L13.5 Extensions Namespace (`crate::ext`)
+
+- SHOULD place readability‑oriented helpers that extend third‑party/std types under `crate::ext::<lib>` to signal intent (extension, not core util).
+- Example (JSON): `crate::ext::serde_json` exposes a dotted‑path fetcher with typed extractors for `serde_json::Value`.
+
+Example (conceptual):
+```rust
+use crate::ext::serde_json::JsonFetch;
+
+let title = pr_json.fetch("title").to_or_default::<String>();
+let pr_head = pr_json.fetch("head.ref").to::<String>();
+let number  = pr_json.fetch("number").to::<i64>().unwrap_or(0);
+```
+
+Guidance:
+- Keep extension modules small, focused, and well‑named (e.g., `serde_json`, not `json_utils`).
+- Prefer wrapper/trait methods that preserve clear step boundaries (fetch path → convert type), matching the spacing and layout rules.
+
 R‑L14 Ranges Return Bundles
 
 - For range processing helpers, SHOULD return cohesive bundles (e.g., `(items, summary, authors)`), not scattered side effects.
