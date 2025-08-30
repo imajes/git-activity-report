@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use chrono::{Local, TimeZone, Utc};
+use chrono::{Local, SecondsFormat, TimeZone, Utc};
 
 pub fn canonicalize_lossy<P: AsRef<Path>>(p: P) -> String {
   let p = p.as_ref();
@@ -38,10 +38,11 @@ pub fn short_sha(full: &str) -> String {
 
 /// Formats a Unix epoch timestamp into an RFC3339 string in the specified timezone.
 pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
-  let dt = if tz_local {
-    Local.timestamp_opt(epoch, 0).single().unwrap()
+  if tz_local {
+    let dt = Local.timestamp_opt(epoch, 0).single().unwrap();
+    dt.to_rfc3339_opts(SecondsFormat::Secs, true)
   } else {
-    Utc.timestamp_opt(epoch, 0).single().unwrap().with_timezone(&Local)
-  };
-  dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
+    dt.to_rfc3339_opts(SecondsFormat::Secs, true)
+  }
 }

@@ -1,3 +1,6 @@
+// --- Git I/O Helpers ---
+// Thin wrappers around `git` commands with small parsing utilities.
+
 use crate::util::run_git;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -6,6 +9,7 @@ type FileStat = (String, Option<i64>, Option<i64>);
 type NumStatMap = HashMap<String, (Option<i64>, Option<i64>)>;
 type NumStats = (Vec<FileStat>, NumStatMap);
 
+/// Returns commit SHAs in the given window, earliest→latest (date order + reverse).
 pub fn rev_list(repo: &str, since: &str, until: &str, include_merges: bool) -> Result<Vec<String>> {
   let mut args: Vec<String> = vec![
     "-c".into(),
@@ -36,6 +40,7 @@ pub fn rev_list(repo: &str, since: &str, until: &str, include_merges: bool) -> R
   )
 }
 
+/// Parsed metadata for a commit.
 pub struct Meta {
   pub sha: String,
   pub parents: Vec<String>,
@@ -81,6 +86,7 @@ const IDX_CT: usize = 9;
 const IDX_S: usize = 10;
 const IDX_B: usize = 11;
 
+/// Show commit metadata via `git show --no-patch` using a NUL-separated format.
 pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
   let fmt = "%H%x00%P%x00%an%x00%ae%x00%ad%x00%cN%x00%cE%x00%cD%x00%at%x00%ct%x00%s%x00%b";
   let args: Vec<String> = vec![
@@ -119,6 +125,7 @@ pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
   })
 }
 
+/// Show per-file additions/deletions with `--numstat` (path, additions, deletions).
 pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
   let args: Vec<String> = vec![
     "show".into(),
@@ -150,6 +157,7 @@ pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
   Ok((files, map))
 }
 
+/// Show name-status with `--name-status -z` and parse into a vec of maps (status/file/old_path).
 pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections::HashMap<String, String>>> {
   // Use -z to split by NUL
   let args: Vec<String> = vec![
@@ -165,39 +173,39 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
 
   let parts: Vec<&str> = out.split('\u{0}').collect();
   let mut res: Vec<std::collections::HashMap<String, String>> = Vec::new();
-  let mut i = 0;
+  let mut index = 0;
 
-  while i < parts.len() && !parts[i].is_empty() {
-    let code = parts[i];
+  while index < parts.len() && !parts[index].is_empty() {
+    let code = parts[index];
 
-    i += 1;
+    index += 1;
     if code.starts_with('R') || code.starts_with('C') {
-      if i + 1 >= parts.len() {
+      if index + 1 >= parts.len() {
         break;
       }
-      let oldp = parts[i];
-      let newp = parts[i + 1];
+      let old_path_component = parts[index];
+      let new_path_component = parts[index + 1];
 
-      i += 2;
+      index += 2;
       let mut m = std::collections::HashMap::new();
       m.insert("status".to_string(), code.to_string());
-      m.insert("old_path".to_string(), oldp.to_string());
-      m.insert("file".to_string(), newp.to_string());
+      m.insert("old_path".to_string(), old_path_component.to_string());
+      m.insert("file".to_string(), new_path_component.to_string());
 
       res.push(m);
     } else {
-      if i >= parts.len() {
+      if index >= parts.len() {
         break;
       }
-      let p = parts[i];
+      let path_component = parts[index];
 
-      i += 1;
-      if p.is_empty() {
+      index += 1;
+      if path_component.is_empty() {
         continue;
       }
       let mut m = std::collections::HashMap::new();
       m.insert("status".to_string(), code.to_string());
-      m.insert("file".to_string(), p.to_string());
+      m.insert("file".to_string(), path_component.to_string());
 
       res.push(m);
     }
@@ -205,6 +213,7 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
   Ok(res)
 }
 
+/// Show shortstat and return the trailing summary line.
 pub fn commit_shortstat(repo: &str, sha: &str) -> Result<String> {
   let args: Vec<String> = vec![
     "show".into(),
@@ -220,6 +229,7 @@ pub fn commit_shortstat(repo: &str, sha: &str) -> Result<String> {
   Ok(s)
 }
 
+/// Show full patch as a unified diff text.
 pub fn commit_patch(repo: &str, sha: &str) -> Result<String> {
   let args: Vec<String> = vec![
     "show".into(),
@@ -232,6 +242,7 @@ pub fn commit_patch(repo: &str, sha: &str) -> Result<String> {
   run_git(repo, &args)
 }
 
+/// Current branch name or None when HEAD detached.
 pub fn current_branch(repo: &str) -> Result<Option<String>> {
   let out = run_git(repo, &["rev-parse".into(), "--abbrev-ref".into(), "HEAD".into()])?;
   let name = out.trim();
@@ -243,6 +254,7 @@ pub fn current_branch(repo: &str) -> Result<Option<String>> {
   }
 }
 
+/// List local branches as short names.
 pub fn list_local_branches(repo: &str) -> Result<Vec<String>> {
   let out = run_git(
     repo,
@@ -263,6 +275,7 @@ pub fn list_local_branches(repo: &str) -> Result<Vec<String>> {
   )
 }
 
+/// Ahead/behind counts comparing HEAD to `branch` (`--left-right --count`).
 pub fn branch_ahead_behind(repo: &str, branch: &str) -> Result<(Option<i64>, Option<i64>)> {
   let out = run_git(
     repo,
@@ -283,6 +296,7 @@ pub fn branch_ahead_behind(repo: &str, branch: &str) -> Result<(Option<i64>, Opt
   }
 }
 
+/// Whether `branch` is merged into HEAD (exit code of `merge-base --is-ancestor`).
 pub fn branch_merged_into_head(repo: &str, branch: &str) -> Result<Option<bool>> {
   // Use merge-base --is-ancestor (exit code indicates result)
   let args: Vec<String> = vec![
@@ -300,6 +314,7 @@ pub fn branch_merged_into_head(repo: &str, branch: &str) -> Result<Option<bool>>
   }
 }
 
+/// Commits in branch but not in HEAD across a window (earliest→latest).
 pub fn unmerged_commits_in_range(
   repo: &str,
   branch: &str,
