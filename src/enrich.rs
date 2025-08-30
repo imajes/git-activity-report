@@ -40,12 +40,38 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPr>> {
         if let Some(arr) = v.as_array() {
           for pr in arr {
             let html = pr.get("html_url").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            out.push(GithubPr {
+
+            let pr_user = pr
+              .get("user")
+              .and_then(|u| u.get("login"))
+              .and_then(|l| l.as_str())
+              .map(|login| crate::model::GithubUser {
+                login: Some(login.to_string()),
+              });
+
+            let pr_head = pr
+              .get("head")
+              .and_then(|x| x.get("ref"))
+              .and_then(|s| s.as_str())
+              .map(|s| s.to_string());
+
+            let pr_base = pr
+              .get("base")
+              .and_then(|x| x.get("ref"))
+              .and_then(|s| s.as_str())
+              .map(|s| s.to_string());
+
+            let pr_dict = GithubPr {
+              user: pr_user,
+              head: pr_head,
+              base: pr_base,
+
               number: pr.get("number").and_then(|x| x.as_i64()).unwrap_or(0),
               title: pr.get("title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
               state: pr.get("state").and_then(|x| x.as_str()).unwrap_or("").to_string(),
               created_at: pr.get("created_at").and_then(|x| x.as_str()).map(|s| s.to_string()),
               merged_at: pr.get("merged_at").and_then(|x| x.as_str()).map(|s| s.to_string()),
+
               html_url: html.clone(),
               diff_url: if html.is_empty() {
                 None
@@ -57,24 +83,9 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPr>> {
               } else {
                 Some(format!("{}.patch", html))
               },
-              user: pr
-                .get("user")
-                .and_then(|u| u.get("login"))
-                .and_then(|l| l.as_str())
-                .map(|login| crate::model::GithubUser {
-                  login: Some(login.to_string()),
-                }),
-              head: pr
-                .get("head")
-                .and_then(|x| x.get("ref"))
-                .and_then(|s| s.as_str())
-                .map(|s| s.to_string()),
-              base: pr
-                .get("base")
-                .and_then(|x| x.get("ref"))
-                .and_then(|s| s.as_str())
-                .map(|s| s.to_string()),
-            });
+            };
+
+            out.push(pr_dict);
           }
         }
       }
