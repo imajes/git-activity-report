@@ -10,19 +10,24 @@ pub fn run(repo: &std::path::Path, args: &[&str]) {
 #[allow(dead_code)]
 pub fn init_fixture_repo() -> tempfile::TempDir {
   let dir = tempfile::TempDir::new().unwrap();
+
   // init repo
   run(dir.path(), &["init", "-q", "-b", "main"]);
   run(dir.path(), &["config", "user.name", "Fixture Bot"]);
   run(dir.path(), &["config", "user.email", "fixture@example.com"]);
   run(dir.path(), &["config", "commit.gpgsign", "false"]);
+
   // Commit A
   std::fs::create_dir_all(dir.path().join("app/models")).unwrap();
   std::fs::write(dir.path().join("app/models/user.rb"), "class User; end\n").unwrap();
+
   run(dir.path(), &["add", "."]);
+
   let env = [
     ("GIT_AUTHOR_DATE", "2025-08-12T14:03:00"),
     ("GIT_COMMITTER_DATE", "2025-08-12T14:03:00"),
   ];
+
   let status = Command::new("git")
     .arg("commit")
     .arg("-q")
@@ -32,26 +37,34 @@ pub fn init_fixture_repo() -> tempfile::TempDir {
     .envs(env.iter().cloned())
     .status()
     .unwrap();
+
   assert!(status.success());
+
   // Branch and commit B
   run(dir.path(), &["checkout", "-q", "-b", "feature/alpha"]);
+
   std::fs::create_dir_all(dir.path().join("app/services")).unwrap();
   std::fs::create_dir_all(dir.path().join("spec/services")).unwrap();
+
   std::fs::write(
     dir.path().join("app/services/payment_service.rb"),
     "class PaymentService; end\n",
   )
   .unwrap();
+
   std::fs::write(
     dir.path().join("spec/services/payment_service_spec.rb"),
     "describe 'PaymentService' do; end\n",
   )
   .unwrap();
+
   run(dir.path(), &["add", "."]);
+
   let env2 = [
     ("GIT_AUTHOR_DATE", "2025-08-13T09:12:00"),
     ("GIT_COMMITTER_DATE", "2025-08-13T09:12:00"),
   ];
+
   let status = Command::new("git")
     .arg("commit")
     .arg("-q")
@@ -61,40 +74,53 @@ pub fn init_fixture_repo() -> tempfile::TempDir {
     .envs(env2.iter().cloned())
     .status()
     .unwrap();
+
   assert!(status.success());
+
   // Back to main
+
   run(dir.path(), &["switch", "-q", "-C", "main"]);
+
   dir
 }
 
 #[allow(dead_code)]
 pub fn bin_path() -> PathBuf {
   let candidates = ["CARGO_BIN_EXE_git-activity-report", "CARGO_BIN_EXE_git_activity_report"];
+
   for key in candidates {
     if let Ok(val) = std::env::var(key) {
       return PathBuf::from(val);
     }
   }
+
   // Fallback to target/debug/<exe>
   let manifest_dir = env!("CARGO_MANIFEST_DIR");
+
   let exe_name = if cfg!(windows) {
     "git-activity-report.exe"
   } else {
     "git-activity-report"
   };
+
   let candidate = PathBuf::from(manifest_dir).join("target").join("debug").join(exe_name);
+
   if candidate.exists() {
     return candidate;
   }
+
   // Try building
   let status = Command::new("cargo")
     .arg("build")
     .current_dir(manifest_dir)
     .status()
     .unwrap();
+
   assert!(status.success(), "cargo build failed in tests");
+
   if candidate.exists() {
     return candidate;
   }
+
   panic!("binary not found at {:?}", candidate);
 }
