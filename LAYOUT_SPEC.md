@@ -34,6 +34,12 @@ R‑L2 Name for Semantics, Not Mechanics
 - MUST name extracted locals to reflect domain semantics (e.g., `pr_user`, `pr_head`, `pr_base`), not mechanics (e.g., `tmp1`, `value`).
 - SHOULD keep names short but meaningful; prefer prefixes that match the enclosing concept when multiple related locals exist (e.g., `pr_*`).
 
+R‑L2.1 No Single‑Letter Idents (Scoped Exception)
+
+- MUST NOT use single‑letter variable names (e.g., `p`, `x`) for values that persist beyond a tiny scope.
+- Exception: MAY use single‑letter indices/counters in tight loops (e.g., `i`, `j`) or for values whose entire lifecycle spans ≤ 3 consecutive lines within a small block.
+- SHOULD otherwise use semantic names (`params`, `branch`, `context`, `path`, `author_key`).
+
 R‑L3 Builder Objects: Build Then Act
 
 - MUST construct complex objects/structs into a local variable when:
@@ -79,6 +85,38 @@ R‑L9 Consistency with Formatter
 - MUST respect the project’s formatter (e.g., rustfmt, black). Layout rules SHOULD be applied in ways that do not fight the formatter; use trailing commas and multi‑line builders to allow clean wrapping.
 
 R‑L10 Cross‑File Consistency
+
+R‑L11 Layered Function Roles and Boundaries
+
+- MUST separate functions by role and keep responsibilities tight:
+  - build_*: pure constructors of domain objects; no I/O; return the value.
+  - process_*: orchestrate phases (build → enrich/derive → I/O/push → finalize).
+  - save_*/write_*: perform I/O in narrow helpers; return Result; mutate only their target.
+  - enrich_*: integrate with external systems; narrow, testable effects.
+  - format_*: pure formatting helpers.
+- SHOULD name functions according to these roles; avoid multi‑purpose functions.
+
+R‑L12 Context Object for Shared Environment
+
+- SHOULD bundle environment/settings (repo path, tz label, flags) into a light context object passed by borrow to helpers.
+- MUST keep context read‑only within helpers; mutability belongs to orchestrators and I/O helpers.
+
+R‑L13 Orchestrator Pipelines (Phases)
+
+- MUST follow the phased pipeline in orchestrators:
+  1) Build pure values
+  2) Optional enrich and derive fields
+  3) I/O (save/write) and push/manifest updates
+  4) Final assembly and return
+- MUST NOT interleave unrelated concerns; do not write while still building core values.
+
+R‑L14 Ranges Return Bundles
+
+- For range processing helpers, SHOULD return cohesive bundles (e.g., `(items, summary, authors)`), not scattered side effects.
+
+R‑L15 Path Handling
+
+- SHOULD prefer `Path`/`PathBuf` and `join` for building file paths; convert to strings only at boundaries where necessary (serialization, string fields).
 
 - SHOULD apply the same grouping and order conventions for analogous structures across files (e.g., always group `user/head/base` before scalars in PR objects).
 
@@ -170,4 +208,3 @@ Audit & CI (Optional)
 Interplay with SPACING_SPEC.md
 
 - SPACING_SPEC controls vertical separation; LAYOUT_SPEC controls structural decomposition and ordering. Apply both: stage steps into logical phases (layout) and separate phases (spacing).
-

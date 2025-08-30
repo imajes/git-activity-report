@@ -123,8 +123,8 @@ pub struct EffectiveConfig {
   pub tz: Tz,
 }
 
-fn month_bounds(ym: &str) -> Result<(String, String)> {
-  let parts: Vec<&str> = ym.split('-').collect();
+fn month_bounds(year_month: &str) -> Result<(String, String)> {
+  let parts: Vec<&str> = year_month.split('-').collect();
 
   if parts.len() != 2 {
     bail!("invalid --month, expected YYYY-MM");

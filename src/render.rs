@@ -128,12 +128,12 @@ fn enrich_with_github_prs(commit: &mut Commit, repo: &str) {
   }
 }
 /// Saves a commit patch to a specified directory.
-fn save_patch_to_disk(commit: &mut Commit, repo: &str, dir: &str) -> Result<()> {
-  std::fs::create_dir_all(dir)?;
-  let path_str = format!("{}/{}.patch", dir, commit.short_sha);
+fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path) -> Result<()> {
+  std::fs::create_dir_all(directory_path)?;
+  let path = directory_path.join(format!("{}.patch", commit.short_sha));
   let patch_content = gitio::commit_patch(repo, &commit.sha)?;
-  std::fs::write(&path_str, patch_content)?;
-  commit.patch_ref.local_patch_file = Some(path_str);
+  std::fs::write(&path, patch_content)?;
+  commit.patch_ref.local_patch_file = Some(path.to_string_lossy().to_string());
   Ok(())
 }
 
@@ -218,14 +218,14 @@ fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
 // --- Report Generation Logic ---
 
 /// Generates a `SimpleReport` containing all commit data in memory.
-pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
-  let shas = gitio::rev_list(&p.repo, &p.since, &p.until, p.include_merges)?;
+pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
+  let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
-    repo: &p.repo,
-    tz_local: p.tz_local,
-    github_prs: p.github_prs,
-    include_patch: p.include_patch,
-    max_patch_bytes: p.max_patch_bytes,
+    repo: &params.repo,
+    tz_local: params.tz_local,
+    github_prs: params.github_prs,
+    include_patch: params.include_patch,
+    max_patch_bytes: params.max_patch_bytes,
   };
 
   let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
@@ -240,8 +240,8 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
   for sha in shas.iter() {
     let mut commit = process_commit(sha, &context)?;
 
-    if let Some(dir) = &p.save_patches_dir {
-      save_patch_to_disk(&mut commit, &p.repo, dir)?;
+    if let Some(patches_dir_str) = &params.save_patches_dir {
+      save_patch_to_disk(&mut commit, &params.repo, Path::new(patches_dir_str))?;
     }
 
     // Accumulate summary stats
@@ -260,14 +260,14 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
   summary.files_touched = files_touched.len();
 
   let report = SimpleReport {
-    repo: p.repo.clone(),
+    repo: params.repo.clone(),
     mode: "simple".into(),
     range: Range {
-      since: p.since.clone(),
-      until: p.until.clone(),
+      since: params.since.clone(),
+      until: params.until.clone(),
     },
-    include_merges: p.include_merges,
-    include_patch: p.include_patch,
+    include_merges: params.include_merges,
+    include_patch: params.include_patch,
     count: commits.len(),
     authors,
     summary,
@@ -278,9 +278,9 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
 }
 
 /// Generates a `RangeManifest` and saves individual commit "shards" to disk.
-pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
-  let label = p.label.clone().unwrap_or_else(|| "window".to_string());
-  let base_dir = p
+pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
+  let label = params.label.clone().unwrap_or_else(|| "window".to_string());
+  let base_dir = params
     .split_out
     .clone()
     .unwrap_or_else(|| format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")));
@@ -288,11 +288,11 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
   std::fs::create_dir_all(&subdir)?;
 
   // Process the primary commit range
-  let (items, summary, authors) = process_commit_range(p, &subdir, &label)?;
+  let (items, summary, authors) = process_commit_range(params, &subdir, &label)?;
 
   // Optionally process unmerged branches
-  let unmerged_activity = if p.include_unmerged {
-    Some(process_unmerged_branches(p, &subdir, &label)?)
+  let unmerged_activity = if params.include_unmerged {
+    Some(process_unmerged_branches(params, &subdir, &label)?)
   } else {
     None
   };
@@ -301,12 +301,12 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
   let manifest = RangeManifest {
     label: Some(label.clone()),
     range: Range {
-      since: p.since.clone(),
-      until: p.until.clone(),
+      since: params.since.clone(),
+      until: params.until.clone(),
     },
-    repo: p.repo.clone(),
-    include_merges: p.include_merges,
-    include_patch: p.include_patch,
+    repo: params.repo.clone(),
+    include_merges: params.include_merges,
+    include_patch: params.include_patch,
     mode: "full".into(),
     count: items.len(),
     authors,
@@ -325,17 +325,17 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
 
 /// Helper for `run_full` to process the main list of commits.
 fn process_commit_range(
-  p: &FullParams,
+  params: &FullParams,
   subdir: &Path,
   label: &str,
 ) -> Result<(Vec<ManifestItem>, Summary, BTreeMap<String, i64>)> {
-  let shas = gitio::rev_list(&p.repo, &p.since, &p.until, p.include_merges)?;
+  let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
-    repo: &p.repo,
-    tz_local: p.tz_local,
-    github_prs: p.github_prs,
-    include_patch: p.include_patch,
-    max_patch_bytes: p.max_patch_bytes,
+    repo: &params.repo,
+    tz_local: params.tz_local,
+    github_prs: params.github_prs,
+    include_patch: params.include_patch,
+    max_patch_bytes: params.max_patch_bytes,
   };
 
   let mut items = Vec::with_capacity(shas.len());
@@ -350,20 +350,20 @@ fn process_commit_range(
   for sha in shas.iter() {
     let mut commit = process_commit(sha, &context)?;
 
-    if p.save_patches {
+    if params.save_patches {
       let patch_dir = subdir.join("patches");
-      save_patch_to_disk(&mut commit, &p.repo, patch_dir.to_str().unwrap())?;
+      save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
     }
 
     // Write commit shard to disk
-    let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
+    let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, params.tz_local);
     let shard_path = subdir.join(&fname);
     std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
 
     // Accumulate manifest data
     items.push(ManifestItem {
       sha: commit.sha.clone(),
-      file: Path::new(label).join(&fname).to_str().unwrap().to_string(),
+      file: Path::new(label).join(&fname).to_string_lossy().to_string(),
       subject: commit.subject.clone(),
     });
     let author_key = format!("{} <{}>", commit.author.name, commit.author.email);
@@ -380,76 +380,82 @@ fn process_commit_range(
 }
 
 /// Helper for `run_full` to process unmerged branches.
-fn process_unmerged_branches(p: &FullParams, subdir: &Path, label: &str) -> Result<UnmergedActivity> {
-  let current_branch = gitio::current_branch(&p.repo)?;
-  let branches: Vec<String> = gitio::list_local_branches(&p.repo)?
+fn process_unmerged_branches(params: &FullParams, subdir: &Path, label: &str) -> Result<UnmergedActivity> {
+  let current_branch = gitio::current_branch(&params.repo)?;
+  let branches: Vec<String> = gitio::list_local_branches(&params.repo)?
     .into_iter()
     .filter(|b| Some(b.as_str()) != current_branch.as_deref())
     .collect();
 
   let context = ProcessContext {
-    repo: &p.repo,
-    tz_local: p.tz_local,
-    github_prs: p.github_prs,
-    include_patch: p.include_patch,
-    max_patch_bytes: p.max_patch_bytes,
+    repo: &params.repo,
+    tz_local: params.tz_local,
+    github_prs: params.github_prs,
+    include_patch: params.include_patch,
+    max_patch_bytes: params.max_patch_bytes,
   };
 
-  let mut ua = UnmergedActivity {
+  let mut unmerged_activity = UnmergedActivity {
     branches_scanned: branches.len(),
     total_unmerged_commits: 0,
     branches: Vec::new(),
   };
 
-  for br in branches {
-    let unmerged_shas = gitio::unmerged_commits_in_range(&p.repo, &br, &p.since, &p.until, p.include_merges)?;
+  for branch in branches {
+    let unmerged_shas = gitio::unmerged_commits_in_range(
+      &params.repo,
+      &branch,
+      &params.since,
+      &params.until,
+      params.include_merges,
+    )?;
     if unmerged_shas.is_empty() {
       continue;
     }
 
-    let br_dir_name = br.replace('/', "__");
-    let br_dir = subdir.join("unmerged").join(&br_dir_name);
+    let branch_dir_name = branch.replace('/', "__");
+    let branch_dir = subdir.join("unmerged").join(&branch_dir_name);
 
-    let mut br_items = Vec::with_capacity(unmerged_shas.len());
+    let mut branch_items = Vec::with_capacity(unmerged_shas.len());
 
     for sha in unmerged_shas.iter() {
       let mut commit = process_commit(sha, &context)?;
 
-      if p.save_patches {
-        let patch_dir = br_dir.join("patches");
-        save_patch_to_disk(&mut commit, &p.repo, patch_dir.to_str().unwrap())?;
+      if params.save_patches {
+        let patch_dir = branch_dir.join("patches");
+        save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
       }
 
-      let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
-      let shard_path = br_dir.join(&fname);
+      let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, params.tz_local);
+      let shard_path = branch_dir.join(&fname);
       std::fs::create_dir_all(shard_path.parent().unwrap())?;
       std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
 
-      br_items.push(ManifestItem {
+      branch_items.push(ManifestItem {
         sha: commit.sha.clone(),
         file: Path::new(label)
           .join("unmerged")
-          .join(&br_dir_name)
+          .join(&branch_dir_name)
           .join(fname)
-          .to_str()
-          .unwrap()
+          .to_string_lossy()
           .to_string(),
         subject: commit.subject.clone(),
       });
     }
 
-    let (behind, ahead) = gitio::branch_ahead_behind(&p.repo, &br)?;
-    ua.total_unmerged_commits += br_items.len();
-    ua.branches.push(BranchItems {
-      name: br.clone(),
-      merged_into_head: gitio::branch_merged_into_head(&p.repo, &br)?,
+    let (behind, ahead) = gitio::branch_ahead_behind(&params.repo, &branch)?;
+    unmerged_activity.total_unmerged_commits += branch_items.len();
+
+    unmerged_activity.branches.push(BranchItems {
+      name: branch.clone(),
+      merged_into_head: gitio::branch_merged_into_head(&params.repo, &branch)?,
       ahead_of_head: ahead,
       behind_head: behind,
-      items: br_items,
+      items: branch_items,
     });
   }
 
-  Ok(ua)
+  Ok(unmerged_activity)
 }
 
 /// Formats a file name for a commit shard based on its timestamp and SHA.

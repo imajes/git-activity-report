@@ -68,6 +68,15 @@ Phases are detected by intent (content), not only syntax. Typical function phase
 - push: appending to in‑memory manifests/collections.
 - finalize: returning values / `Ok(...)`.
 
+Section Headers and Grouping
+
+- Large files SHOULD use section headers (comments such as `// --- Helpers ---`) to delineate major groups: parameters (public API), internal context, helpers, orchestration, tests.
+- MUST have exactly one blank line before and after a section header; within the section, apply the usual spacing rules.
+
+Function Group Separation
+
+- MUST have one blank line between top‑level function declarations. If grouped by role (e.g., build_*/process_*/save_*/enrich_*/format_*), the section header defines the boundary.
+
 The exact sequence depends on function design. When in doubt, decide phases by “what a human would want to scan separately”.
 
 Global Invariants
@@ -118,6 +127,10 @@ R7. Post‑Block New Phase
 
 - After a multi‑line control block ends (ctrl-end), if the next line begins a new phase (not an `else/else if` chain), insert a blank.
 
+R7.1 Early‑Return Helpers (Specialization)
+
+- After an early‑return subtree (e.g., a small function that returns early based on conditions), if the next line begins a new phase, a blank MUST separate them. This codifies post‑block separation for early exit helpers.
+
 R8. Derived Fields, Write, Push, Return
 
 - Insert a blank before pure derived field computation if it starts a new phase.
@@ -151,6 +164,10 @@ Rust
 - `} else {` and `else if` chains MUST remain compact (G3).
 - Match arms: keep each arm’s body compact. If an arm body is multi‑line and followed by another multi‑line arm, a blank MAY be inserted between arms for readability; however, prefer consistency with rustfmt (default: no extra blank between arms).
 - Macros: treat as opaque unless they clearly perform I/O — then apply R6 around them.
+
+Orchestrator Step Separation
+
+- In orchestrators (e.g., run_simple, run_full), each pipeline step MUST be separated by one blank: compute inputs, mkdir, process ranges, optional unmerged processing, build manifest, write to disk, return.
 
 Python
 
