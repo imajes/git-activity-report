@@ -31,8 +31,7 @@ pub struct FileEntry {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PatchRef {
   pub embed: bool,
-  pub git_show_cmd: Vec<String>,
-  pub git_show_cmd_str: String,
+  pub git_show_cmd: String,
   pub local_patch_file: Option<String>,
   pub github_diff_url: Option<String>,
   pub github_patch_url: Option<String>,

@@ -165,15 +165,7 @@ fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit> {
 
   let patch_ref = PatchRef {
     embed: context.include_patch,
-    git_show_cmd: vec![
-      "git".into(),
-      "show".into(),
-      "--patch".into(),
-      "--format=".into(),
-      "--no-color".into(),
-      meta.sha.clone(),
-    ],
-    git_show_cmd_str: format!("git show --patch --format= --no-color {}", meta.sha),
+    git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha),
     local_patch_file: None,
     github_diff_url: None,
     github_patch_url: None,

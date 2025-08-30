@@ -21,16 +21,11 @@
     },
     "mode": {
       "type": "string",
-      "enum": [
-        "simple"
-      ]
+      "enum": ["simple"]
     },
     "range": {
       "type": "object",
-      "required": [
-        "since",
-        "until"
-      ],
+      "required": ["since", "until"],
       "properties": {
         "since": {
           "type": "string"
@@ -60,11 +55,7 @@
     },
     "summary": {
       "type": "object",
-      "required": [
-        "additions",
-        "deletions",
-        "files_touched"
-      ],
+      "required": ["additions", "deletions", "files_touched"],
       "properties": {
         "additions": {
           "type": "integer",
@@ -83,11 +74,7 @@
     },
     "unmerged_activity": {
       "type": "object",
-      "required": [
-        "branches_scanned",
-        "branches",
-        "total_unmerged_commits"
-      ],
+      "required": ["branches_scanned", "branches", "total_unmerged_commits"],
       "properties": {
         "branches_scanned": {
           "type": "integer",
@@ -113,22 +100,13 @@
                 "type": "string"
               },
               "merged_into_head": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
+                "type": ["boolean", "null"]
               },
               "ahead_of_head": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "behind_head": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "commits": {
                 "type": "array",
@@ -154,11 +132,7 @@
   "$defs": {
     "person": {
       "type": "object",
-      "required": [
-        "name",
-        "email",
-        "date"
-      ],
+      "required": ["name", "email", "date"],
       "properties": {
         "name": {
           "type": "string"
@@ -196,20 +170,14 @@
         },
         "timezone": {
           "type": "string",
-          "enum": [
-            "local",
-            "utc"
-          ]
+          "enum": ["local", "utc"]
         }
       },
       "additionalProperties": false
     },
     "fileEntry": {
       "type": "object",
-      "required": [
-        "file",
-        "status"
-      ],
+      "required": ["file", "status"],
       "properties": {
         "file": {
           "type": "string"
@@ -221,65 +189,39 @@
           "type": "string"
         },
         "additions": {
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         },
         "deletions": {
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         }
       },
       "additionalProperties": false
     },
     "patchRef": {
       "type": "object",
-      "required": [
-        "embed",
-        "git_show_cmd"
-      ],
+      "required": ["embed", "git_show_cmd"],
       "properties": {
         "embed": {
           "type": "boolean"
         },
         "git_show_cmd": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "type": "string"
         },
         "local_patch_file": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "github_diff_url": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "github_patch_url": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": false
     },
     "githubPR": {
       "type": "object",
-      "required": [
-        "number",
-        "title",
-        "state",
-        "html_url"
-      ],
+      "required": ["number", "title", "state", "html_url"],
       "properties": {
         "number": {
           "type": "integer"
@@ -291,55 +233,34 @@
           "type": "string"
         },
         "created_at": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "merged_at": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "html_url": {
           "type": "string"
         },
         "diff_url": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "patch_url": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "user": {
           "type": "object",
           "properties": {
             "login": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             }
           },
           "additionalProperties": true
         },
         "head": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "base": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": true
@@ -419,3 +340,4 @@
     }
   }
 }
+
