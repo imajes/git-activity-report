@@ -3,7 +3,7 @@ use std::process::Command;
 
 #[test]
 fn simple_mode_outputs_expected_shape() {
-  let repo = common::init_fixture_repo();
+  let repo = common::fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let mut cmd = Command::new(common::bin_path());
 

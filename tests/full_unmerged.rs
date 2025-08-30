@@ -3,7 +3,7 @@ use std::process::Command;
 
 #[test]
 fn full_mode_writes_manifest_and_shards_with_unmerged() {
-  let repo = common::init_fixture_repo();
+  let repo = common::fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
