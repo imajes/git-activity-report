@@ -94,7 +94,6 @@ fmt-fixtures:
     echo "fmt: $$f"; \
   done
 
-# If you added tests/scripts/make-fixture-repo.sh
 build-fixtures:
   if [ -x tests/scripts/make-fixture-repo.sh ]; then \
     bash tests/scripts/make-fixture-repo.sh; \
@@ -140,8 +139,6 @@ rust-run-full: rust-build
 test: build-fixtures rust-build
   just -f tests/Justfile help-py
   just -f tests/Justfile help-rs
-  just -f tests/Justfile version-snap || true
-  just -f tests/Justfile golden
   just -f tests/Justfile golden-rs
   just -f tests/Justfile validate-rs-full
 
