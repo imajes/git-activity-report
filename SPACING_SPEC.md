@@ -22,12 +22,12 @@ Notation
 
 Key Concepts
 
-1) Phase and Mini‑Phase
+1. Phase and Mini‑Phase
 
 - Phase: a conceptual unit of work that should be visually separated by one blank line from neighboring phases.
 - Mini‑phase: a tightly coupled pair (or small cluster) of lines that should remain adjacent (no blank between them) within a phase.
 
-2) Tokens (Line Classifier)
+2. Tokens (Line Classifier)
 
 Classify each source line (or cohesive multi‑line construct) as zero or more of:
 
@@ -48,7 +48,7 @@ Language notes for tokenization:
 - Python: first triple‑quoted string after `def`/`class` is a docstring and MUST remain adjacent to the header.
 - Justfile: treat recipe headers as decl; recipe bodies are blocks; comments adhere to section‑marker rules.
 
-3) Phase Detection (Heuristics)
+3. Phase Detection (Heuristics)
 
 Phases are detected by intent (content), not only syntax. Typical function phases include:
 
@@ -75,7 +75,7 @@ Section Headers and Grouping
 
 Function Group Separation
 
-- MUST have one blank line between top‑level function declarations. If grouped by role (e.g., build_*/process_*/save_*/enrich_*/format_*), the section header defines the boundary.
+- MUST have one blank line between top‑level function declarations. If grouped by role (e.g., build*\*/process\*\*/save\_*/enrich*\*/format*\*), the section header defines the boundary.
 
 The exact sequence depends on function design. When in doubt, decide phases by “what a human would want to scan separately”.
 
@@ -185,13 +185,15 @@ Examples (Rust)
 E1. Builder literal → use (bound literal)
 
 BAD:
-```
+
+```rust
 let fe = FileEntry { /* … */ };
 files.push(fe);
 ```
 
 GOOD:
-```
+
+```rust
 let fe = FileEntry { /* … */ };
 
 files.push(fe);
@@ -200,14 +202,16 @@ files.push(fe);
 E2. Embedded literal in call (single visual unit)
 
 GOOD:
-```
+
+```rust
 files.push(FileEntry { /* … */ });
 ```
 
 E3. Accumulators + set (mini‑phase + phase change)
 
 GOOD:
-```
+
+```rust
 if let Some(a) = f.additions { adds += a; }
 if let Some(d) = f.deletions { dels += d; }
 
@@ -217,7 +221,8 @@ files_touched.insert(f.file.clone());
 E4. Post‑block new phase (after PR enrichment)
 
 GOOD:
-```
+
+```rust
 if p.github_prs {
   // … mutate patch_ref/commit …
 }
@@ -228,7 +233,8 @@ let fname = format_shard_name(...);
 E5. Save‑patches cadence (I/O boundaries)
 
 GOOD:
-```
+
+```rust
 std::fs::create_dir_all(dir)?;
 
 let path = format!("{}/{}.patch", dir, short_sha);

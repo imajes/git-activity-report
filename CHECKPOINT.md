@@ -1,11 +1,13 @@
 Checkpoint — Status, Next Steps, and Quick Commands
 
 Overview
+
 - Python is the reference implementation; Rust port is largely feature complete and aligned with schema v2.
 - Validations use local ajv; tests include unit + integration; CI and release workflows are added.
 - Goldens/fixtures are neutralized to “Fixture Bot” and stable.
 
 What’s Done (Rust)
+
 - CLI + config normalization (simple/full modes; month/since–until windows; tz; merges; patch flags; save-patches; include-unmerged; github-prs).
 - Full mode:
   - Shards under <base>/<label>/YYYY.MM.DD-HH.MM-<shortsha>.json (respects --tz).
@@ -28,6 +30,7 @@ What’s Done (Rust)
   - Whitespace/readability pass across util, gitio, main, enrich, and parts of render.
 
 Tests & Tooling
+
 - Unit tests (colocated): shard filename formatter.
 - Integration tests:
   - cli_windows.rs: error paths + simple smoke.
@@ -44,10 +47,12 @@ Tests & Tooling
   - Fixture generator writes to tests/.tmp (does not overwrite committed fixtures).
 
 CI & Packaging
+
 - CI (ci.yml): validate-all (ajv), fmt, clippy, build, just test (snapshots + goldens).
 - Release (release.yml): builds on tagged pushes (macOS x86/ARM + Ubuntu), tars artifacts, creates GitHub release.
 
 What’s Pending
+
 - Implement --for phrase windows in Rust (parity with Python’s natural-language windows).
 - Broaden tests:
   - Timezone filename parity (local vs utc).
@@ -59,6 +64,7 @@ What’s Pending
 - Packaging polish: Homebrew tap automation, cross builds for Linux x86_64/ARM.
 
 Notes / Gotchas
+
 - Python remains the contract; Rust output adds body_lines and git_show_cmd_str (schemas allow extra fields).
 - PR enrichment is optional and intentionally non-fatal; absence is expected without token.
 - Goldens should remain neutral; keep “Fixture Bot”.
@@ -67,6 +73,7 @@ Notes / Gotchas
   - Full: validates top/range manifests and diffs items by {sha, subject}. Add shard-by-shard compare later if desired.
 
 Quick Commands (after restart)
+
 - Tooling sanity:
   - just doctor
 - Schema validation:
@@ -83,6 +90,7 @@ Quick Commands (after restart)
   - (or mode=simple for single-file outputs)
 
 File Touchpoints
+
 - src/gitio.rs: commit_meta index mapping; type aliases; spacing.
 - src/render.rs: simple/full/unmerged flows; patch_ref, body_lines; whitespace.
 - src/model.rs: added git_show_cmd_str; body_lines; patch_ref optional fields always present.

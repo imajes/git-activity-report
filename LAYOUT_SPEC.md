@@ -27,12 +27,18 @@ R‑L1 Extract‑Before‑Build (Nested Access)
 
 - MUST NOT inline long chains of nested lookups (e.g., JSON path extractions) directly inside object/struct literals or call arguments when the chain has 3+ operations or spans multiple lines.
 - MUST extract such chains into well‑named local variables before constructing the larger literal or making the call.
-- SHOULD limit method/property chain lines to one deref/hop per line when multi‑line (e.g., `.get("user")` newline `.and_then(...)` newline …).
+- MUST limit method/property chain lines to one deref/hop per line when multi‑line (e.g., `.get("user")` newline `.and_then(...)` newline …).
 
 R‑L2 Name for Semantics, Not Mechanics
 
 - MUST name extracted locals to reflect domain semantics (e.g., `pr_user`, `pr_head`, `pr_base`), not mechanics (e.g., `tmp1`, `value`).
 - SHOULD keep names short but meaningful; prefer prefixes that match the enclosing concept when multiple related locals exist (e.g., `pr_*`).
+
+R‑L2.2 JSON Naming and Domain Types
+
+- SHOULD suffix raw JSON values with `_json` to avoid confusion with domain objects (e.g., `pr_json` for a `serde_json::Value`).
+- MUST name parsed containers clearly (e.g., `parsed_json`, `json_pull_requests`) when it improves clarity.
+- MUST prefer unabbreviated domain type names for formal models (e.g., `GithubPullRequest` instead of `GithubPr`).
 
 R‑L2.1 No Single‑Letter Idents (Scoped Exception)
 
@@ -49,35 +55,82 @@ R‑L3 Builder Objects: Build Then Act
 - MUST perform the action (push/insert/return/call) in a subsequent statement (build → use), separated by a blank per SPACING_SPEC.
 - MAY embed a small single‑line literal in a call when trivially readable; otherwise prefer the two‑step pattern.
 
+Example:
+
+BAD:
+
+```rust
+out.push(GithubPullRequest { /* many fields, multiple lines */ });
+```
+
+GOOD:
+
+```rust
+let pr_item = GithubP
+{ /* many fields, multiple lines */ };
+
+out.push(pr_item);
+```
+
 R‑L4 Field Grouping and Order (Inside Literals)
 
-- SHOULD group fields inside a literal by concern and keep those groups in a stable order across the codebase. Suggested grouping order:
-  1) Identity and relationships (e.g., nested `user`, `head`, `base` objects)
-  2) Core scalar fields (e.g., `number`, `title`, `state`)
-  3) Temporal fields (e.g., `created_at`, `merged_at`)
-  4) Location/links/paths (e.g., `html_url`, `diff_url`, `patch_url`)
-  5) Optional/derived fields (e.g., `body_lines`)
+- MUST group fields inside a literal by concern and keep those groups in a stable order across the codebase. Suggested grouping order:
+  1. Identity and relationships (e.g., nested `user`, `head`, `base` objects)
+  2. Core scalar fields (e.g., `number`, `title`, `state`)
+  3. Temporal fields (e.g., `created_at`, `merged_at`)
+  4. Location/links/paths (e.g., `html_url`, `diff_url`, `patch_url`)
+  5. Optional/derived fields (e.g., `body_lines`)
 - SHOULD separate groups with a blank line where the language/formatter allows (see SPACING_SPEC R1–R11 for blank line rules). If the language disallows intra‑literal blanks, preserve grouping by ordering alone.
 
 R‑L5 One Concern per Statement
 
-- SHOULD avoid mixing multiple concerns in a single statement. Examples:
+- MUST avoid mixing multiple concerns in a single statement. Examples:
   - Do not compute a path, fetch data, and write a file in one expression; split into one step per concern.
   - Do not mutate multiple distinct objects in the same dense block without visual separation.
 
 R‑L6 Chain Length and Rebinding
 
-- SHOULD keep method/property chains to ≤3 hops when inline. If longer or if any hop has non‑trivial logic, rebind to a local.
-- SHOULD prefer reusing extracted locals across multiple fields rather than re‑computing the same chain.
+- MUST keep method/property chains to ≤3 hops when inline. If longer or if any hop has non‑trivial logic, rebind to a local.
+- MUST prefer reusing extracted locals across multiple fields rather than re‑computing the same chain.
 
 R‑L7 Act After Validation/Optionality
 
-- SHOULD compute and validate optional pieces (e.g., `user`, `head`, `base`) before building the main object; keep the build phase free of control flow where possible.
+- MUST compute and validate optional pieces (e.g., `user`, `head`, `base`) before building the main object; keep the build phase free of control flow where possible.
 - MUST NOT hide fallible/optional logic inside a large literal when it impairs readability; extract and name it.
+
+R‑L7.5 Guard‑Early Exits (Flatten Control Flow)
+
+- MUST prefer guard‑early returns/continues to avoid deep nesting (e.g., authenticate/token present → call succeeds → JSON parses → shape is array).
+- Each guard constitutes a small phase; separate guard blocks from subsequent phases with a single blank per SPACING_SPEC.
+
+Example (conceptual):
+
+BAD:
+
+```rust
+if let Ok(resp) = call {
+  if let Ok(v) = parse {
+    if let Some(arr) = v.as_array() {
+      …
+    }
+  }
+}
+
+```
+
+GOOD:
+
+```rust
+// use sequential guards:
+let resp = match call {
+  Ok(x) => x,
+  Err(_) => return Ok(vec![])
+};
+```
 
 R‑L8 Return/Push at the End of a Phase
 
-- SHOULD position the final action (push/insert/return) at the end of a phase, not in the middle of computations.
+- MUST position the final action (push/insert/return) at the end of a phase, not in the middle of computations.
 - MUST separate final actions from preceding non‑trivial builds with a blank per SPACING_SPEC (see R8 and S4).
 
 R‑L9 Consistency with Formatter
@@ -89,11 +142,11 @@ R‑L10 Cross‑File Consistency
 R‑L11 Layered Function Roles and Boundaries
 
 - MUST separate functions by role and keep responsibilities tight:
-  - build_*: pure constructors of domain objects; no I/O; return the value.
-  - process_*: orchestrate phases (build → enrich/derive → I/O/push → finalize).
-  - save_*/write_*: perform I/O in narrow helpers; return Result; mutate only their target.
-  - enrich_*: integrate with external systems; narrow, testable effects.
-  - format_*: pure formatting helpers.
+  - build\_\*: pure constructors of domain objects; no I/O; return the value.
+  - process\_\*: orchestrate phases (build → enrich/derive → I/O/push → finalize).
+  - save*\*/write*\*: perform I/O in narrow helpers; return Result; mutate only their target.
+  - enrich\_\*: integrate with external systems; narrow, testable effects.
+  - format\_\*: pure formatting helpers.
 - SHOULD name functions according to these roles; avoid multi‑purpose functions.
 
 R‑L12 Context Object for Shared Environment
@@ -104,10 +157,10 @@ R‑L12 Context Object for Shared Environment
 R‑L13 Orchestrator Pipelines (Phases)
 
 - MUST follow the phased pipeline in orchestrators:
-  1) Build pure values
-  2) Optional enrich and derive fields
-  3) I/O (save/write) and push/manifest updates
-  4) Final assembly and return
+  1. Build pure values
+  2. Optional enrich and derive fields
+  3. I/O (save/write) and push/manifest updates
+  4. Final assembly and return
 - MUST NOT interleave unrelated concerns; do not write while still building core values.
 
 R‑L14 Ranges Return Bundles
@@ -125,7 +178,8 @@ Layout Patterns (Good/Bad)
 L‑E1 Extract‑Before‑Build (JSON‑ish lookups)
 
 BAD (dense):
-```
+
+```rust
 out.push(Pr {
   user: pr.get("user").and_then(|u| u.get("login")).and_then(|l| l.as_str()).map(|s| s.to_string()),
   // … many other fields …
@@ -133,7 +187,8 @@ out.push(Pr {
 ```
 
 GOOD (staged):
-```
+
+```rust
 let pr_user = pr
   .get("user")
   .and_then(|u| u.get("login"))
@@ -151,7 +206,8 @@ out.push(pr_obj);
 L‑E2 Field Grouping (order + spacing)
 
 GOOD:
-```
+
+```rust
 let item = Pr {
   // Identity / relations
   user: pr_user,
@@ -177,8 +233,10 @@ let item = Pr {
 L‑E3 Save‑Patch Cadence (create → use)
 
 GOOD:
-```
+
+```rust
 std::fs::create_dir_all(dir)?;
+
 
 let path = format!("{}/{}.patch", dir, short_sha);
 
@@ -191,13 +249,13 @@ patch_ref.local_patch_file = Some(path);
 
 Application During Creation (Agent Guidance)
 
-1) Sketch phases before writing code; map steps to phases and mini‑phases (see SPACING_SPEC).
-2) For each nested lookup, ask “will this hurt readability if inline?” If yes, extract and name it.
-3) Build complex literals into locals, then act; do not inline large literals in pushes/returns.
-4) Group fields logically and keep the grouping order consistent across files. Use blanks between groups where allowed.
-5) Keep one concern per statement. Split compute vs I/O vs mutation into distinct steps.
-6) Use trailing commas to let formatters wrap multi‑line builders predictably.
-7) Place final actions (push/return) at the end of phases with a blank before them.
+1. Sketch phases before writing code; map steps to phases and mini‑phases (see SPACING_SPEC).
+2. For each nested lookup, ask “will this hurt readability if inline?” If yes, extract and name it.
+3. Build complex literals into locals, then act; do not inline large literals in pushes/returns.
+4. Group fields logically and keep the grouping order consistent across files. Use blanks between groups where allowed.
+5. Keep one concern per statement. Split compute vs I/O vs mutation into distinct steps.
+6. Use trailing commas to let formatters wrap multi‑line builders predictably.
+7. Place final actions (push/return) at the end of phases with a blank before them.
 
 Audit & CI (Optional)
 

@@ -17,13 +17,13 @@ Export Git activity into structured JSON—either a single file (simple mode) or
 
 ## Install / Run
 
-- Local run (from this repo):
+* Local run (from this repo):
 
   ```bash
   python3 ./git-activity-report.py --help
   ```
 
-- Optional install (to invoke as `git activity-report ...`): place the script on your PATH as `git-activity-report` and make it executable.
+* Optional install (to invoke as `git activity-report ...`): place the script on your PATH as `git-activity-report` and make it executable.
 
   ```bash
   install -m 0755 ./git-activity-report.py ~/bin/git-activity-report
