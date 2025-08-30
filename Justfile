@@ -118,6 +118,16 @@ rust-build:
 rust-test:
   cargo test
 
+# Run tests with cargo-nextest if available. Creates a shared fixture repo
+# for the duration of the run via tests/scripts/nextest/setup-fixture.sh.
+test-nextest:
+  if cargo nextest --version >/dev/null 2>&1; then \
+    NEXTEST_EXPERIMENTAL_SETUP_SCRIPTS=1 cargo nextest run; \
+  else \
+    echo "cargo-nextest not found; falling back to cargo test"; \
+    cargo test; \
+  fi
+
 rust-fmt:
   cargo fmt --all -- --check
 

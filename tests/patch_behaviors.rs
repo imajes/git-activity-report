@@ -3,7 +3,7 @@ use std::process::Command;
 
 #[test]
 fn simple_patch_clipping_sets_flag() {
-  let repo = common::init_fixture_repo();
+  let repo = common::fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let mut cmd = Command::new(common::bin_path());
   cmd.args([
@@ -28,7 +28,7 @@ fn simple_patch_clipping_sets_flag() {
 
 #[test]
 fn simple_save_patches_sets_local_path() {
-  let repo = common::init_fixture_repo();
+  let repo = common::fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let patch_dir = tempfile::TempDir::new().unwrap();
   let mut cmd = Command::new(common::bin_path());

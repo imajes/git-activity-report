@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[allow(dead_code)]
@@ -82,6 +82,42 @@ pub fn init_fixture_repo() -> tempfile::TempDir {
   run(dir.path(), &["switch", "-q", "-C", "main"]);
 
   dir
+}
+
+pub struct FixtureRepo {
+  _owned: Option<tempfile::TempDir>,
+  path: PathBuf,
+}
+
+impl FixtureRepo {
+  pub fn path(&self) -> &Path {
+    &self.path
+  }
+}
+
+/// Obtain a fixture repo path for tests.
+///
+/// Priority:
+/// 1) If env GAR_FIXTURE_REPO_DIR is set (e.g., by nextest setup), use it.
+/// 2) If tests/.tmp/tmpdir exists, use it.
+/// 3) Otherwise create a fresh temp repo (owned for lifetime of this handle).
+pub fn fixture_repo() -> FixtureRepo {
+  if let Ok(dir) = std::env::var("GAR_FIXTURE_REPO_DIR") {
+    return FixtureRepo { _owned: None, path: PathBuf::from(dir) };
+  }
+
+  let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  let tmp_file = manifest_dir.join("tests").join(".tmp").join("tmpdir");
+  if let Ok(s) = std::fs::read_to_string(&tmp_file) {
+    let p = s.trim();
+    if !p.is_empty() {
+      return FixtureRepo { _owned: None, path: PathBuf::from(p) };
+    }
+  }
+
+  panic!(
+    "Fixture repo not found. Ensure nextest setup script has run.\n  - Run: NEXTEST_EXPERIMENTAL_SETUP_SCRIPTS=1 cargo nextest run\n  - Or: bash tests/scripts/nextest/setup-fixture.sh (exports GAR_FIXTURE_REPO_DIR)"
+  );
 }
 
 #[allow(dead_code)]

@@ -17,10 +17,12 @@ time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
 rayon = "1.10"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 regex = "1.11"
-ureq = { version = "2.10", default-features = true, features = ["json"] }
+ureq = { version = "2.12.1", default-features = true, features = ["json"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
 tempfile = "3.10"
 regex = "1.11"
+proptest = "1.7.0"
+insta = "1.43.1"
