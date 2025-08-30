@@ -125,11 +125,13 @@ pub struct EffectiveConfig {
 
 fn month_bounds(ym: &str) -> Result<(String, String)> {
   let parts: Vec<&str> = ym.split('-').collect();
+
   if parts.len() != 2 {
     bail!("invalid --month, expected YYYY-MM");
   }
   let y: i32 = parts[0].parse().context("parsing year in --month")?;
   let m: i32 = parts[1].parse().context("parsing month in --month")?;
+
   if !(1..=12).contains(&m) {
     bail!("invalid month in --month");
   }
@@ -201,6 +203,7 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
 fn main() -> Result<()> {
   let cli = Cli::parse();
   let cfg = normalize(cli).context("validating CLI flags")?;
+
   match cfg.mode {
     Mode::Simple => {
       let (since, until) = compute_window_strings(&cfg)?;
@@ -215,7 +218,9 @@ fn main() -> Result<()> {
         save_patches_dir: cfg.save_patches.clone(),
         github_prs: cfg.github_prs,
       };
+
       let report = render::run_simple(&params)?;
+
       if cfg.out == "-" {
         println!("{}", serde_json::to_string_pretty(&report)?);
       } else {
@@ -243,7 +248,9 @@ fn main() -> Result<()> {
         save_patches: cfg.save_patches.is_some(),
         github_prs: cfg.github_prs,
       };
+
       let res = render::run_full(&params)?;
+
       println!("{}", serde_json::to_string_pretty(&res)?);
       Ok(())
     }

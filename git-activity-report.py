@@ -36,6 +36,7 @@ RC = ReportConfiguration()  # module-level singleton
 def iso_in_tz(epoch, tz=None):
     tz = RC.tz if tz is None else tz
     dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+
     if tz == "local":
         dt = dt.astimezone()
     return dt.isoformat(timespec="seconds")
@@ -82,6 +83,7 @@ def parse_origin_github(root):
 def gh_prs_for_commit(root, sha):
     """Return [] on any failure. If authenticated, returns minimal PR list."""
     owner_repo = parse_origin_github(root)
+
     if not owner_repo:
         return []
     owner, repo = owner_repo
@@ -213,9 +215,11 @@ def last_n_weeks_calendar(n, now=None):
 def parse_for_phrase(for_str):
     s = for_str.strip().lower()
     m = re.match(r"every\s+month\s+for\s+the\s+last\s+(\d+)\s+months?", s)
+
     if m:
         return last_n_months_calendar(max(1, int(m.group(1)))), None
     m = re.match(r"every\s+week\s+for\s+the\s+last\s+(\d+)\s+weeks?", s)
+
     if m:
         return last_n_weeks_calendar(max(1, int(m.group(1)))), None
     if s == "last week":
@@ -283,6 +287,7 @@ def commit_numstat(root, sha):
     files = []
     for line in out.splitlines():
         parts = line.split("\t")
+
         if len(parts) != 3:
             continue
         a, d, path = parts
@@ -305,6 +310,7 @@ def commit_name_status(root, sha):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
     if out.returncode != 0:
         return []
     data = out.stdout.decode("utf-8", "replace")
@@ -343,9 +349,11 @@ def commit_shortstat(root, sha):
 
 def commit_patch(root, sha, max_bytes=0):
     txt = git(root, "show", "--patch", "--format=", "--no-color", sha)
+    
     if max_bytes is None or max_bytes <= 0:
         return txt, False
     enc = txt.encode("utf-8")
+
     if len(enc) <= max_bytes:
         return txt, False
     enc = enc[:max_bytes]
@@ -438,6 +446,7 @@ def build_commit_obj(
     pretty = commit_shortstat(root, sha)
 
     files_detailed = []
+
     if ns:
         for entry in ns:
             path = entry.get("file")
@@ -485,6 +494,7 @@ def build_commit_obj(
 
     if github_prs:
         prs = gh_prs_for_commit(root, meta["sha"])
+
         if prs:
             obj["github_prs"] = prs
             obj["patch_ref"]["github_diff_url"] = prs[0].get("diff_url")
@@ -643,6 +653,7 @@ def report_for_range(
     else:
         # simple: single JSON array
         commits_out = []
+
         for sha in commits:
             obj = build_commit_obj(
                 root, sha, include_patch, max_patch_bytes, save_patches, github_prs
@@ -792,6 +803,7 @@ def main():
     # Determine windows
     buckets = []
     single = None
+
     if args.month:
         single = month_bounds(args.month)
     elif args.for_str:
@@ -803,6 +815,7 @@ def main():
 
     root = os.path.abspath(args.repo)
     mode_full = bool(args.full)
+
     if not args.simple and not args.full:
         mode_full = False  # default to simple
 
@@ -874,6 +887,7 @@ def main():
 
     since, until = single
     label = None
+
     if args.month:
         label = args.month
     elif args.for_str in ("last week", "last month"):

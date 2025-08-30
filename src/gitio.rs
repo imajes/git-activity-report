@@ -17,15 +17,19 @@ pub fn rev_list(repo: &str, since: &str, until: &str, include_merges: bool) -> R
     "--reverse".into(),
     "HEAD".into(),
   ];
+
   if !include_merges {
     args.insert(4, "--no-merges".into());
   }
+
   let out = run_git(repo, &args)?;
+
   Ok(
     out
       .lines()
       .filter_map(|l| {
         let s = l.trim();
+
         if s.is_empty() { None } else { Some(s.to_string()) }
       })
       .collect(),
@@ -86,12 +90,15 @@ pub fn commit_meta(repo: &str, sha: &str) -> Result<Meta> {
     format!("--pretty=format:{}", fmt),
     sha.into(),
   ];
+
   let out = run_git(repo, &args)?;
+
   let parts: Vec<&str> = out.split('\u{0}').collect();
   let get = |i: usize| -> String { parts.get(i).unwrap_or(&"").to_string() };
   // See index mapping above for details on each field.
   let at: i64 = get(IDX_AT).parse().unwrap_or(0);
   let ct: i64 = get(IDX_CT).parse().unwrap_or(0);
+
   Ok(Meta {
     sha: get(IDX_H),
     parents: if get(IDX_P).is_empty() {
@@ -120,11 +127,15 @@ pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
     "--no-color".into(),
     sha.into(),
   ];
+
   let out = run_git(repo, &args)?;
+
   let mut files = Vec::new();
   let mut map: NumStatMap = HashMap::new();
+
   for line in out.lines() {
     let parts: Vec<&str> = line.split('\t').collect();
+
     if parts.len() != 3 {
       continue;
     }
@@ -132,6 +143,7 @@ pub fn commit_numstat(repo: &str, sha: &str) -> Result<NumStats> {
     let a = to_int(parts[0]);
     let d = to_int(parts[1]);
     let path = parts[2].to_string();
+
     map.insert(path.clone(), (a, d));
     files.push((path, a, d));
   }
@@ -148,12 +160,16 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
     "--no-color".into(),
     sha.into(),
   ];
+
   let out = run_git(repo, &args)?;
+
   let parts: Vec<&str> = out.split('\u{0}').collect();
   let mut res: Vec<std::collections::HashMap<String, String>> = Vec::new();
   let mut i = 0;
+
   while i < parts.len() && !parts[i].is_empty() {
     let code = parts[i];
+
     i += 1;
     if code.starts_with('R') || code.starts_with('C') {
       if i + 1 >= parts.len() {
@@ -161,17 +177,20 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
       }
       let oldp = parts[i];
       let newp = parts[i + 1];
+
       i += 2;
       let mut m = std::collections::HashMap::new();
       m.insert("status".to_string(), code.to_string());
       m.insert("old_path".to_string(), oldp.to_string());
       m.insert("file".to_string(), newp.to_string());
+
       res.push(m);
     } else {
       if i >= parts.len() {
         break;
       }
       let p = parts[i];
+
       i += 1;
       if p.is_empty() {
         continue;
@@ -179,6 +198,7 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
       let mut m = std::collections::HashMap::new();
       m.insert("status".to_string(), code.to_string());
       m.insert("file".to_string(), p.to_string());
+
       res.push(m);
     }
   }
@@ -193,7 +213,9 @@ pub fn commit_shortstat(repo: &str, sha: &str) -> Result<String> {
     "--no-color".into(),
     sha.into(),
   ];
+
   let out = run_git(repo, &args)?;
+
   let s = out.lines().last().unwrap_or("").trim().to_string();
   Ok(s)
 }
@@ -206,12 +228,14 @@ pub fn commit_patch(repo: &str, sha: &str) -> Result<String> {
     "--no-color".into(),
     sha.into(),
   ];
+
   run_git(repo, &args)
 }
 
 pub fn current_branch(repo: &str) -> Result<Option<String>> {
   let out = run_git(repo, &["rev-parse".into(), "--abbrev-ref".into(), "HEAD".into()])?;
   let name = out.trim();
+
   if name == "HEAD" {
     Ok(None)
   } else {
@@ -228,6 +252,7 @@ pub fn list_local_branches(repo: &str) -> Result<Vec<String>> {
       "--format=%(refname:short)".into(),
     ],
   )?;
+
   Ok(
     out
       .lines()
@@ -248,7 +273,9 @@ pub fn branch_ahead_behind(repo: &str, branch: &str) -> Result<(Option<i64>, Opt
       format!("HEAD...{}", branch),
     ],
   )?;
+
   let parts: Vec<&str> = out.split_whitespace().collect();
+
   if parts.len() == 2 {
     Ok((parts[0].parse::<i64>().ok(), parts[1].parse::<i64>().ok()))
   } else {
@@ -264,7 +291,9 @@ pub fn branch_merged_into_head(repo: &str, branch: &str) -> Result<Option<bool>>
     branch.into(),
     "HEAD".into(),
   ];
+
   let res = std::process::Command::new("git").args(&args).current_dir(repo).status();
+
   match res {
     Ok(st) => Ok(Some(st.success())),
     Err(_) => Ok(None),
@@ -289,9 +318,11 @@ pub fn unmerged_commits_in_range(
     "--date-order".into(),
     "--reverse".into(),
   ];
+
   if !include_merges {
     args.insert(6, "--no-merges".into());
   }
+
   let out = run_git(repo, &args)?;
   Ok(
     out
