@@ -8,6 +8,7 @@ mod gitio;
 mod model;
 mod render;
 mod util;
+mod ext;
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -137,6 +138,7 @@ fn month_bounds(year_month: &str) -> Result<(String, String)> {
   }
   let next_y = if m == 12 { y + 1 } else { y };
   let next_m = if m == 12 { 1 } else { m + 1 };
+
   Ok((
     format!("{y:04}-{m:02}-01T00:00:00"),
     format!("{next_y:04}-{next_m:02}-01T00:00:00"),
@@ -226,6 +228,7 @@ fn main() -> Result<()> {
       } else {
         std::fs::write(&cfg.out, serde_json::to_vec_pretty(&report)?)?;
       }
+
       Ok(())
     }
     Mode::Full => {
@@ -252,6 +255,7 @@ fn main() -> Result<()> {
       let res = render::run_full(&params)?;
 
       println!("{}", serde_json::to_string_pretty(&res)?);
+
       Ok(())
     }
   }

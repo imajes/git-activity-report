@@ -55,7 +55,7 @@ pub struct Commit {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub patch_clipped: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub github_prs: Option<Vec<GithubPr>>,
+  pub github_prs: Option<Vec<GithubPullRequest>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub body_lines: Option<Vec<String>>,
 }
@@ -93,7 +93,7 @@ pub struct GithubUser {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GithubPr {
+pub struct GithubPullRequest {
   pub number: i64,
   pub title: String,
   pub state: String,

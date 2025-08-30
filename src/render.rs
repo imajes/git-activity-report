@@ -64,6 +64,7 @@ fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
 
   if !name_status_list.is_empty() {
     // Prefer name-status for more detail (e.g., renames)
+
     Ok(
       name_status_list
         .into_iter()
@@ -82,6 +83,7 @@ fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
     )
   } else {
     // Fallback to numstat for a simpler list of files
+
     Ok(
       num_list
         .into_iter()
@@ -104,11 +106,13 @@ fn clip_patch(patch_text: String, max_bytes: usize) -> (Option<String>, Option<b
   }
 
   let bytes = patch_text.as_bytes();
+
   if bytes.len() <= max_bytes {
     return (Some(patch_text), Some(false));
   }
 
   let mut end = max_bytes;
+
   while end > 0 && (bytes[end] & 0xC0) == 0x80 {
     // Find the start of a UTF-8 character
     end -= 1;
@@ -134,6 +138,7 @@ fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path) ->
   let patch_content = gitio::commit_patch(repo, &commit.sha)?;
   std::fs::write(&path, patch_content)?;
   commit.patch_ref.local_patch_file = Some(path.to_string_lossy().to_string());
+
   Ok(())
 }
 
@@ -376,6 +381,7 @@ fn process_commit_range(
   }
 
   summary.files_touched = files_touched.len();
+
   Ok((items, summary, authors))
 }
 
@@ -409,6 +415,7 @@ fn process_unmerged_branches(params: &FullParams, subdir: &Path, label: &str) ->
       &params.until,
       params.include_merges,
     )?;
+
     if unmerged_shas.is_empty() {
       continue;
     }

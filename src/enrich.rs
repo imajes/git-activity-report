@@ -1,4 +1,5 @@
-use crate::model::GithubPr;
+use crate::model::GithubPullRequest;
+use crate::ext::serde_json::JsonFetch;
 use crate::util::run_git;
 use anyhow::Result;
 
@@ -8,88 +9,92 @@ fn parse_origin_github(repo: &str) -> Option<(String, String)> {
     let re1 = regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").unwrap();
 
     if let Some(c) = re1.captures(u) {
-      return Some((
-        c.get(1).unwrap().as_str().to_string(),
-        c.get(2).unwrap().as_str().to_string(),
-      ));
+      let owner = c.get(1).unwrap().as_str().to_string();
+      let repo_name = c.get(2).unwrap().as_str().to_string();
+
+      return Some((owner, repo_name));
     }
   }
   None
 }
 
-pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPr>> {
-  let mut out: Vec<GithubPr> = Vec::new();
-  let Some((owner, name)) = parse_origin_github(repo) else {
-    return Ok(out);
+pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
+  let mut out: Vec<GithubPullRequest> = Vec::new();
+
+  // Guard 1: repository must be a GitHub origin
+  let (owner, name) = match parse_origin_github(repo) {
+    Some(pair) => pair,
+    None => return Ok(out),
   };
 
-  if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-    // Use ureq with token
-    let url = format!("https://api.github.com/repos/{}/{}/commits/{}/pulls", owner, name, sha);
-    let agent = ureq::AgentBuilder::new().build();
+  // Guard 2: token must be present
+  let token = match std::env::var("GITHUB_TOKEN") {
+    Ok(t) => t,
+    Err(_) => return Ok(out),
+  };
 
-    let res = agent
-      .get(&url)
-      .set("Accept", "application/vnd.github+json")
-      .set("User-Agent", "git-activity-report")
-      .set("Authorization", &format!("Bearer {}", token))
-      .call();
+  // Build request
+  let url = format!(
+    "https://api.github.com/repos/{}/{}/commits/{}/pulls",
+    owner, name, sha
+  );
+  let agent = ureq::AgentBuilder::new().build();
 
-    if let Ok(resp) = res {
-      if let Ok(v) = resp.into_json::<serde_json::Value>() {
-        if let Some(arr) = v.as_array() {
-          for pr in arr {
-            let html = pr.get("html_url").and_then(|x| x.as_str()).unwrap_or("").to_string();
+  // Guard 3: HTTP call must succeed
+  let response = match agent
+    .get(&url)
+    .set("Accept", "application/vnd.github+json")
+    .set("User-Agent", "git-activity-report")
+    .set("Authorization", &format!("Bearer {}", token))
+    .call()
+  {
+    Ok(resp) => resp,
+    Err(_) => return Ok(out),
+  };
 
-            let pr_user = pr
-              .get("user")
-              .and_then(|u| u.get("login"))
-              .and_then(|l| l.as_str())
-              .map(|login| crate::model::GithubUser {
-                login: Some(login.to_string()),
-              });
+  // Guard 4: response must parse as JSON
+  let parsed_json: serde_json::Value = match response.into_json() {
+    Ok(v) => v,
+    Err(_) => return Ok(out),
+  };
 
-            let pr_head = pr
-              .get("head")
-              .and_then(|x| x.get("ref"))
-              .and_then(|s| s.as_str())
-              .map(|s| s.to_string());
+  // Guard 5: top-level value must be an array
+  let json_pull_requests = match parsed_json.as_array() {
+    Some(a) => a,
+    None => return Ok(out),
+  };
 
-            let pr_base = pr
-              .get("base")
-              .and_then(|x| x.get("ref"))
-              .and_then(|s| s.as_str())
-              .map(|s| s.to_string());
+  // Map JSON → GithubPullRequest
+  for pr_json in json_pull_requests {
+    let html = pr_json.fetch("html_url").to_or_default::<String>();
 
-            let pr_dict = GithubPr {
-              user: pr_user,
-              head: pr_head,
-              base: pr_base,
+    let pr_user_login = pr_json.fetch("user.login").to::<String>();
+    let pr_user = pr_user_login.map(|login| crate::model::GithubUser {
+      login: Some(login),
+    });
 
-              number: pr.get("number").and_then(|x| x.as_i64()).unwrap_or(0),
-              title: pr.get("title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-              state: pr.get("state").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-              created_at: pr.get("created_at").and_then(|x| x.as_str()).map(|s| s.to_string()),
-              merged_at: pr.get("merged_at").and_then(|x| x.as_str()).map(|s| s.to_string()),
+    let pr_head = pr_json.fetch("head.ref").to::<String>();
 
-              html_url: html.clone(),
-              diff_url: if html.is_empty() {
-                None
-              } else {
-                Some(format!("{}.diff", html))
-              },
-              patch_url: if html.is_empty() {
-                None
-              } else {
-                Some(format!("{}.patch", html))
-              },
-            };
+    let pr_base = pr_json.fetch("base.ref").to::<String>();
 
-            out.push(pr_dict);
-          }
-        }
-      }
-    }
+    let pr_item = GithubPullRequest {
+      user: pr_user,
+      head: pr_head,
+      base: pr_base,
+
+      number: pr_json.fetch("number").to::<i64>().unwrap_or(0),
+      title: pr_json.fetch("title").to_or_default::<String>(),
+      state: pr_json.fetch("state").to_or_default::<String>(),
+      created_at: pr_json.fetch("created_at").to::<String>(),
+      merged_at: pr_json.fetch("merged_at").to::<String>(),
+
+      html_url: html.clone(),
+      diff_url: if html.is_empty() { None } else { Some(format!("{}.diff", html)) },
+      patch_url: if html.is_empty() { None } else { Some(format!("{}.patch", html)) },
+    };
+
+    out.push(pr_item);
   }
+
   Ok(out)
 }
