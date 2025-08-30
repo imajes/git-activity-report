@@ -1,12 +1,14 @@
+use std::collections::{BTreeMap, HashSet};
+
+use anyhow::Result;
+use chrono::TimeZone;
+
 use crate::enrich;
 use crate::gitio;
 use crate::model::{
   BranchItems, Commit, FileEntry, ManifestItem, PatchRef, Person, Range, RangeManifest, SimpleReport, Summary,
   Timestamps, UnmergedActivity,
 };
-use anyhow::Result;
-use chrono::TimeZone;
-use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug)]
 pub struct SimpleParams {
@@ -52,6 +54,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
     let shortstat = gitio::commit_shortstat(&repo, sha)?;
 
     let mut files: Vec<FileEntry> = Vec::new();
+
     if !ns.is_empty() {
       for entry in ns {
         let path = entry.get("file").cloned().unwrap_or_default();
@@ -63,6 +66,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
           additions: adds_dels.0,
           deletions: adds_dels.1,
         };
+
         files.push(fe);
       }
     } else {
@@ -82,11 +86,14 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       if let Some(a) = f.additions {
         additions += a;
       }
+
       if let Some(d) = f.deletions {
         deletions += d;
       }
+
       files_touched.insert(f.file.clone());
     }
+
     let author_key = format!("{} <{}>", meta.author_name, meta.author_email);
     *authors.entry(author_key).or_insert(0) += 1;
 
@@ -98,6 +105,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       commit_local: iso_in_tz(meta.ct, p.tz_local),
       timezone: tz_label.to_string(),
     };
+
     let mut patch_ref = PatchRef {
       embed: p.include_patch,
       git_show_cmd: vec![
@@ -113,6 +121,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       github_diff_url: None,
       github_patch_url: None,
     };
+
     let mut commit = Commit {
       sha: meta.sha.clone(),
       short_sha: short_sha(&meta.sha),
@@ -138,22 +147,27 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
       github_prs: None,
       body_lines: None,
     };
+
     if p.include_patch {
       let txt = gitio::commit_patch(&repo, sha)?;
+
       if p.max_patch_bytes == 0 {
         commit.patch = Some(txt);
         commit.patch_clipped = Some(false);
       } else {
         let bytes = txt.as_bytes();
+
         if bytes.len() <= p.max_patch_bytes {
           commit.patch = Some(txt);
           commit.patch_clipped = Some(false);
         } else {
           // Clip at UTF-8 boundary
           let mut end = p.max_patch_bytes;
+
           while end > 0 && (bytes[end - 1] & 0b1100_0000) == 0b1000_0000 {
             end -= 1;
           }
+
           commit.patch = Some(String::from_utf8_lossy(&bytes[..end]).to_string());
           commit.patch_clipped = Some(true);
         }
@@ -162,9 +176,12 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
 
     if let Some(dir) = &p.save_patches_dir {
       std::fs::create_dir_all(dir)?;
+
       let path = format!("{}/{}.patch", dir, commit.short_sha);
       let txt = gitio::commit_patch(&repo, sha)?;
+
       std::fs::write(&path, txt)?;
+
       patch_ref.local_patch_file = Some(path.clone());
       commit.patch_ref.local_patch_file = Some(path);
     }
@@ -174,6 +191,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
         if !prs.is_empty() {
           patch_ref.github_diff_url = prs[0].diff_url.clone();
           patch_ref.github_patch_url = prs[0].patch_url.clone();
+
           commit.github_prs = Some(prs);
           commit.patch_ref.github_diff_url = patch_ref.github_diff_url.clone();
           commit.patch_ref.github_patch_url = patch_ref.github_patch_url.clone();
@@ -184,6 +202,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
     if !commit.body.is_empty() {
       commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect());
     }
+
     commits.push(commit);
   }
 
@@ -205,6 +224,7 @@ pub fn run_simple(p: &SimpleParams) -> Result<SimpleReport> {
     },
     commits,
   };
+
   Ok(report)
 }
 
@@ -263,10 +283,12 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
     let ns = gitio::commit_name_status(&p.repo, sha)?;
     let shortstat = gitio::commit_shortstat(&p.repo, sha)?;
     let mut files: Vec<FileEntry> = Vec::new();
+
     if !ns.is_empty() {
       for entry in ns {
         let path = entry.get("file").cloned().unwrap_or_default();
         let adds_dels = num_map.get(&path).cloned().unwrap_or((None, None));
+
         files.push(FileEntry {
           file: path.clone(),
           status: entry.get("status").cloned().unwrap_or_else(|| "M".to_string()),
@@ -286,6 +308,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
         });
       }
     }
+
     for f in &files {
       if let Some(a) = f.additions {
         adds += a
@@ -293,10 +316,13 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
       if let Some(d) = f.deletions {
         dels += d
       };
+
       files_touched.insert(f.file.clone());
     }
+
     let author_key = format!("{} <{}>", meta.author_name, meta.author_email);
     *authors.entry(author_key).or_insert(0) += 1;
+
     let timestamps = Timestamps {
       author: meta.at,
       commit: meta.ct,
@@ -304,6 +330,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
       commit_local: iso_in_tz(meta.ct, p.tz_local),
       timezone: if p.tz_local { "local".into() } else { "utc".into() },
     };
+
     let mut patch_ref = PatchRef {
       embed: p.include_patch,
       git_show_cmd: vec![
@@ -319,6 +346,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
       github_diff_url: None,
       github_patch_url: None,
     };
+
     let mut commit = Commit {
       sha: meta.sha.clone(),
       short_sha: short_sha(&meta.sha),
@@ -344,52 +372,67 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
       github_prs: None,
       body_lines: None,
     };
+
     if p.include_patch {
       let txt = gitio::commit_patch(&p.repo, sha)?;
+
       if p.max_patch_bytes == 0 {
         commit.patch = Some(txt);
         commit.patch_clipped = Some(false);
       } else {
         let bytes = txt.as_bytes();
+
         if bytes.len() <= p.max_patch_bytes {
           commit.patch = Some(txt);
           commit.patch_clipped = Some(false);
         } else {
           let mut end = p.max_patch_bytes;
+
           while end > 0 && (bytes[end - 1] & 0b1100_0000) == 0b1000_0000 {
             end -= 1;
           }
+
           commit.patch = Some(String::from_utf8_lossy(&bytes[..end]).to_string());
           commit.patch_clipped = Some(true);
         }
       }
     }
+
     if p.save_patches {
       let patch_dir = format!("{}/patches", subdir);
       std::fs::create_dir_all(&patch_dir)?;
+
       let path = format!("{}/{}.patch", patch_dir, commit.short_sha);
       let txt = gitio::commit_patch(&p.repo, sha)?;
+
       std::fs::write(&path, txt)?;
+
       patch_ref.local_patch_file = Some(path.clone());
       commit.patch_ref.local_patch_file = Some(path);
     }
+
     if p.github_prs {
       if let Ok(prs) = enrich::try_fetch_prs(&p.repo, &meta.sha) {
         if !prs.is_empty() {
           patch_ref.github_diff_url = prs[0].diff_url.clone();
           patch_ref.github_patch_url = prs[0].patch_url.clone();
+
           commit.github_prs = Some(prs.clone());
           commit.patch_ref.github_diff_url = prs[0].diff_url.clone();
           commit.patch_ref.github_patch_url = prs[0].patch_url.clone();
         }
       }
     }
+
     let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
     let shard_path = format!("{}/{}", subdir, fname);
+
     if !commit.body.is_empty() {
       commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect());
     }
+
     std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
+
     items.push(ManifestItem {
       sha: commit.sha.clone(),
       file: format!("{}/{}", label, fname),
@@ -398,37 +441,47 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
   }
 
   let mut unmerged: Option<UnmergedActivity> = None;
+
   if p.include_unmerged {
     let cur = gitio::current_branch(&p.repo)?;
     let branches: Vec<String> = gitio::list_local_branches(&p.repo)?
       .into_iter()
       .filter(|b| Some(b.clone()) != cur)
       .collect();
+
     let mut ua = UnmergedActivity {
       branches_scanned: branches.len(),
       total_unmerged_commits: 0,
       branches: Vec::new(),
     };
+
     for br in branches {
       let uniq = gitio::unmerged_commits_in_range(&p.repo, &br, &p.since, &p.until, p.include_merges)?;
+
       if uniq.is_empty() {
         continue;
       }
+
       let merged = gitio::branch_merged_into_head(&p.repo, &br)?;
       let (behind, ahead) = gitio::branch_ahead_behind(&p.repo, &br)?;
+
       let br_dir = format!("{}/unmerged/{}", subdir, br.replace('/', "__"));
       std::fs::create_dir_all(&br_dir)?;
+
       let mut br_items: Vec<ManifestItem> = Vec::new();
+
       for sha in uniq.iter() {
         let meta = gitio::commit_meta(&p.repo, sha)?;
         let (num_list, num_map) = gitio::commit_numstat(&p.repo, sha)?;
         let ns = gitio::commit_name_status(&p.repo, sha)?;
         let shortstat = gitio::commit_shortstat(&p.repo, sha)?;
         let mut files: Vec<FileEntry> = Vec::new();
+
         if !ns.is_empty() {
           for entry in ns {
             let path = entry.get("file").cloned().unwrap_or_default();
             let adds_dels = num_map.get(&path).cloned().unwrap_or((None, None));
+
             files.push(FileEntry {
               file: path.clone(),
               status: entry.get("status").cloned().unwrap_or_else(|| "M".into()),
@@ -448,6 +501,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
             });
           }
         }
+
         let timestamps = Timestamps {
           author: meta.at,
           commit: meta.ct,
@@ -455,6 +509,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
           commit_local: iso_in_tz(meta.ct, p.tz_local),
           timezone: if p.tz_local { "local".into() } else { "utc".into() },
         };
+
         let patch_ref = PatchRef {
           embed: p.include_patch,
           git_show_cmd: vec![
@@ -470,6 +525,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
           github_diff_url: None,
           github_patch_url: None,
         };
+
         let mut commit = Commit {
           sha: meta.sha.clone(),
           short_sha: short_sha(&meta.sha),
@@ -495,24 +551,35 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
           github_prs: None,
           body_lines: None,
         };
+
         if p.save_patches {
           let patch_dir = format!("{}/patches", br_dir);
           std::fs::create_dir_all(&patch_dir)?;
+
           let path = format!("{}/{}.patch", patch_dir, commit.short_sha);
           let txt = gitio::commit_patch(&p.repo, sha)?;
+
           std::fs::write(&path, txt)?;
+
           commit.patch_ref.local_patch_file = Some(path);
         }
+
         let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, p.tz_local);
         let shard_path = format!("{}/{}", br_dir, fname);
-        if !commit.body.is_empty() { commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect()); }
+
+        if !commit.body.is_empty() {
+          commit.body_lines = Some(commit.body.split('\n').map(|s| s.to_string()).collect());
+        }
+
         std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
+
         br_items.push(ManifestItem {
           sha: commit.sha.clone(),
           file: format!("{}/unmerged/{}/{}", label, br.replace('/', "__"), fname),
           subject: commit.subject.clone(),
         });
       }
+
       ua.total_unmerged_commits += br_items.len();
       ua.branches.push(BranchItems {
         name: br,
@@ -522,6 +589,7 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
         items: br_items,
       });
     }
+
     unmerged = Some(ua);
   }
 
@@ -545,15 +613,16 @@ pub fn run_full(p: &FullParams) -> Result<serde_json::Value> {
     items,
     unmerged_activity: unmerged,
   };
+
   let manifest_path = format!("{}/manifest-{}.json", base, label);
+
   std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+
   Ok(serde_json::json!({"dir": base, "manifest": format!("manifest-{}.json", label)}))
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-
   #[test]
   fn shard_name_utc_has_expected_pattern() {
     let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-10-01T00:30:00Z approx

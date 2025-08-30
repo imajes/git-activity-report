@@ -6,6 +6,7 @@ fn parse_origin_github(repo: &str) -> Option<(String, String)> {
   if let Ok(url) = run_git(repo, &["config".into(), "--get".into(), "remote.origin.url".into()]) {
     let u = url.trim();
     let re1 = regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").unwrap();
+
     if let Some(c) = re1.captures(u) {
       return Some((
         c.get(1).unwrap().as_str().to_string(),
@@ -21,16 +22,19 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPr>> {
   let Some((owner, name)) = parse_origin_github(repo) else {
     return Ok(out);
   };
+
   if let Ok(token) = std::env::var("GITHUB_TOKEN") {
     // Use ureq with token
     let url = format!("https://api.github.com/repos/{}/{}/commits/{}/pulls", owner, name, sha);
     let agent = ureq::AgentBuilder::new().build();
+
     let res = agent
       .get(&url)
       .set("Accept", "application/vnd.github+json")
       .set("User-Agent", "git-activity-report")
       .set("Authorization", &format!("Bearer {}", token))
       .call();
+
     if let Ok(resp) = res {
       if let Ok(v) = resp.into_json::<serde_json::Value>() {
         if let Some(arr) = v.as_array() {

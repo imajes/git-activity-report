@@ -20,6 +20,7 @@ pub fn run_git(repo: &str, args: &[String]) -> Result<String> {
     .current_dir(repo)
     .output()
     .with_context(|| format!("spawning git {:?}", args))?;
+
   if out.status.success() {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
   } else {

@@ -144,3 +144,10 @@ test: build-fixtures rust-build
   just -f tests/Justfile golden
   just -f tests/Justfile golden-rs
   just -f tests/Justfile validate-rs-full
+
+# Spacing audit (reports potential misses; manual fixes per SPACING.md)
+audit-spacing:
+  bash scripts/spacing-audit.sh normal src
+
+audit-spacing-strict:
+  bash scripts/spacing-audit.sh strict src
