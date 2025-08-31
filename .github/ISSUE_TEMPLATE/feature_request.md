@@ -2,19 +2,20 @@ name: Feature request
 description: Suggest an idea for git-activity-report
 labels: [enhancement]
 body:
-  - type: textarea
+
+- type: textarea
     attributes:
       label: Problem
       description: What problem does this feature solve?
-  - type: textarea
+- type: textarea
     attributes:
       label: Proposal
       description: Describe the solution and any alternatives considered
-  - type: textarea
+- type: textarea
     attributes:
       label: Output/Schema impact
       description: Which schemas might change? Include examples
-  - type: checkboxes
+- type: checkboxes
     attributes:
       label: Backwards compatibility
       options:

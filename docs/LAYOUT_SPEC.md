@@ -169,6 +169,7 @@ R‑L13.5 Extensions Namespace (`crate::ext`)
 - Example (JSON): `crate::ext::serde_json` exposes a dotted‑path fetcher with typed extractors for `serde_json::Value`.
 
 Example (conceptual):
+
 ```rust
 use crate::ext::serde_json::JsonFetch;
 
@@ -178,6 +179,7 @@ let number  = pr_json.fetch("number").to::<i64>().unwrap_or(0);
 ```
 
 Guidance:
+
 - Keep extension modules small, focused, and well‑named (e.g., `serde_json`, not `json_utils`).
 - Prefer wrapper/trait methods that preserve clear step boundaries (fetch path → convert type), matching the spacing and layout rules.
 

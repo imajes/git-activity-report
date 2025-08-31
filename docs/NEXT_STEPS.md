@@ -174,7 +174,7 @@ Add `tests/snapshots/` and two Just recipes:
 help-py:
   mkdir -p tests/snapshots
   # Use the in-repo Python reference for help output and normalize name
-  python3 ./git-activity-report.py --help \
+  python3 ./prototype/git-activity-report.py --help \
     | sed -e 's#\(.\)/.*git-activity-report#git-activity-report#g' \
           -e 's#git activity-report#git-activity-report#g' \
     > tests/snapshots/help.python.txt
@@ -192,7 +192,7 @@ You can also snapshot `--version`:
 ```just
 version-snap:
   mkdir -p tests/snapshots
-  python3 ./git-activity-report.py --version > tests/snapshots/version.python.txt
+  python3 ./prototype/git-activity-report.py --version > tests/snapshots/version.python.txt
   target/debug/git-activity-report --version > tests/snapshots/version.rust.txt
   diff -u tests/snapshots/version.python.txt tests/snapshots/version.rust.txt || true # versions may differ
 ```
