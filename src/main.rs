@@ -12,6 +12,7 @@ mod util;
 mod window;
 
 use crate::window::{Tz, WindowSpec};
+use chrono::Local;
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -91,6 +92,10 @@ struct Cli {
   /// Emit a troff man page to stdout (internal; for packaging)
   #[arg(long, hide = true)]
   gen_man: bool,
+
+  /// Override the "now" instant for natural-language parsing (hidden; tests only)
+  #[arg(long = "now-override", hide = true)]
+  now_override: Option<String>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -113,6 +118,7 @@ pub struct EffectiveConfig {
   github_prs: bool,
   include_unmerged: bool,
   pub tz: Tz,
+  now_override: Option<String>,
 }
 
 fn normalize(cli: Cli) -> Result<EffectiveConfig> {
@@ -159,14 +165,83 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     github_prs: cli.github_prs,
     include_unmerged: cli.include_unmerged,
     tz: cli.tz,
+    now_override: cli.now_override.clone(),
   })
 }
 
 pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
   let cfg = normalize(cli).context("validating CLI flags")?;
 
+  // If --for is a multi-bucket phrase, handle top-manifest orchestration
+  if let WindowSpec::ForPhrase { phrase } = &cfg.window {
+    let now_opt = parse_now_override(&cfg);
+    if let Some(buckets) = window::for_phrase_buckets(phrase, now_opt) {
+      let is_full = matches!(cfg.mode, Mode::Full);
+      // Choose top directory
+      let base_dir = if let Some(dir) = &cfg.split_out { dir.clone() } else {
+        let tmp = std::env::temp_dir();
+        tmp
+          .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
+          .to_string_lossy()
+          .to_string()
+      };
+      std::fs::create_dir_all(&base_dir)?;
+
+      // Assemble top manifest structure incrementally
+      let mut top = serde_json::json!({
+        "repo": cfg.repo,
+        "multi": true,
+        "generated_at": Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+        "mode": if is_full { "full" } else { "simple" },
+        "include_merges": cfg.include_merges,
+        "include_patch": cfg.include_patch,
+        "include_unmerged": cfg.include_unmerged,
+        "buckets": [],
+      });
+
+      if is_full {
+        for b in buckets {
+          let params = build_full_params(&cfg, b.since.clone(), b.until.clone());
+          // Override label and split_out to keep all ranges under the same top dir
+          let params = render::FullParams { split_out: Some(base_dir.clone()), label: Some(b.label.clone()), ..params };
+          let result = render::run_full(&params)?;
+          let entry = serde_json::json!({
+            "label": b.label,
+            "range": {"since": b.since, "until": b.until},
+            "manifest": result.get("manifest").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            "dir": result.get("dir").and_then(|v| v.as_str()).unwrap_or(&base_dir).to_string(),
+          });
+          top["buckets"].as_array_mut().unwrap().push(entry);
+        }
+      } else {
+        for b in buckets {
+          let params = build_simple_params(&cfg, b.since.clone(), b.until.clone());
+          let report = render::run_simple(&params)?;
+          let file_path = std::path::Path::new(&base_dir).join(format!("{}.json", b.label));
+          std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
+          let entry = serde_json::json!({
+            "label": b.label,
+            "range": {"since": b.since, "until": b.until},
+            "file": file_path.to_string_lossy().to_string(),
+          });
+          top["buckets"].as_array_mut().unwrap().push(entry);
+        }
+      }
+
+      // Write top manifest and print pointer
+      let top_manifest_path = std::path::Path::new(&base_dir).join("manifest.json");
+      std::fs::write(&top_manifest_path, serde_json::to_vec_pretty(&top)?)?;
+      println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+        "dir": base_dir,
+        "manifest": "manifest.json"
+      }))?);
+
+      return Ok(());
+    }
+  }
+
   // Shared: compute window bounds once
-  let (since, until) = window::compute_window_strings(&cfg.window)?;
+  let (since, until) = window::compute_window_strings(&cfg.window, parse_now_override(&cfg))?;
 
   // Generate the report JSON value in the match
   let (json, allow_file_output) = match cfg.mode {
@@ -190,6 +265,20 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
   }
 
   Ok(())
+}
+
+fn parse_now_override(cfg: &EffectiveConfig) -> Option<chrono::DateTime<chrono::Local>> {
+  cfg
+    .now_override
+    .as_ref()
+    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Local)))
+    .or_else(|| {
+      cfg
+        .now_override
+        .as_ref()
+        .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").ok())
+        .and_then(|ndt| ndt.and_local_timezone(chrono::Local).single())
+    })
 }
 
 fn build_simple_params(cfg: &EffectiveConfig, since: String, until: String) -> render::SimpleParams {
@@ -231,7 +320,7 @@ fn main() -> Result<()> {
   let cli = Cli::parse();
 
   if cli.gen_man {
-    let mut cmd = Cli::command();
+    let cmd = Cli::command();
     // Render a section-1 man page
     let man = clap_mangen::Man::new(cmd);
     let mut buf: Vec<u8> = Vec::new();
@@ -266,6 +355,8 @@ mod tests {
       github_prs: false,
       include_unmerged: false,
       tz: Tz::Utc,
+      gen_man: false,
+      now_override: None,
     }
   }
 

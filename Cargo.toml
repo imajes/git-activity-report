@@ -20,6 +20,8 @@ regex = "1.11"
 ureq = { version = "2.12.1", default-features = true, features = ["json"] }
 jsonschema = "0.33.0"
 clap_mangen = "0.2"
+chrono-english = "0.1"
+two_timer = "2.2.5"
 
 [dev-dependencies]
 assert_cmd = "2.0"

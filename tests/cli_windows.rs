@@ -12,13 +12,15 @@ fn errors_when_no_time_selection() {
 }
 
 #[test]
-fn errors_for_for_phrase_unimplemented() {
+fn for_phrase_last_week_simple_smoke() {
+  let repo = common::fixture_repo();
+  let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.args(["--simple", "--for", "last week", "--repo", "."]);
+  cmd.args(["--simple", "--for", "last week", "--repo", repo_path, "--tz", "utc"]);
   let out = cmd.output().unwrap();
-  assert!(!out.status.success());
-  let err = String::from_utf8_lossy(&out.stderr);
-  assert!(err.contains("not implemented"));
+  assert!(out.status.success());
+  let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+  assert_eq!(v["mode"], "simple");
 }
 
 #[test]

@@ -25,3 +25,4 @@ __pycache__/
 # Node
 node_modules/
 real-output
+scratch
