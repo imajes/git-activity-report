@@ -4,7 +4,7 @@ use assert_cmd::Command;
 #[test]
 fn cli_full_top_and_manifest_snapshot() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
 
@@ -52,4 +52,3 @@ fn cli_full_top_and_manifest_snapshot() {
     ".items[*].sha" => "[sha]",
   });
 }
-

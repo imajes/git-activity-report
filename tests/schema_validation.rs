@@ -18,7 +18,7 @@ fn compile_schema(name: &str) -> jsonschema::Validator {
 #[test]
 fn simple_json_conforms_to_schema() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
 
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
@@ -45,7 +45,7 @@ fn simple_json_conforms_to_schema() {
 #[test]
 fn full_manifest_conforms_to_schema_and_shards_conform() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
 

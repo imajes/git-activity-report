@@ -4,7 +4,7 @@ use assert_cmd::Command;
 #[test]
 fn snapshot_first_shard_commit() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
 
@@ -61,4 +61,3 @@ fn snapshot_first_shard_commit() {
 
   insta::assert_json_snapshot!(v);
 }
-

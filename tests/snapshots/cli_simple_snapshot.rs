@@ -4,7 +4,7 @@ use assert_cmd::Command;
 #[test]
 fn cli_simple_snapshot() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
 
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
@@ -43,4 +43,3 @@ fn cli_simple_snapshot() {
     ".commits[*].patch_ref.git_show_cmd" => "[git-show]",
   });
 }
-
