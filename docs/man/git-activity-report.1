@@ -1,0 +1,70 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-activity-report 1  "git-activity-report 0.1.0" 
+.SH NAME
+git\-activity\-report \- Export Git activity to JSON (simple or sharded)
+.SH SYNOPSIS
+\fBgit\-activity\-report\fR [\fB\-\-repo\fR] [\fB\-\-month\fR] [\fB\-\-for\fR] [\fB\-\-since\fR] [\fB\-\-until\fR] [\fB\-\-simple\fR] [\fB\-\-full\fR] [\fB\-\-include\-merges\fR] [\fB\-\-include\-patch\fR] [\fB\-\-max\-patch\-bytes\fR] [\fB\-\-save\-patches\fR] [\fB\-\-split\-out\fR] [\fB\-\-out\fR] [\fB\-\-github\-prs\fR] [\fB\-\-include\-unmerged\fR] [\fB\-\-tz\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Export Git activity to JSON (simple or sharded)
+.SH OPTIONS
+.TP
+\fB\-\-repo\fR \fI<REPO>\fR [default: .]
+Path to a Git repository (default: current dir)
+.TP
+\fB\-\-month\fR \fI<MONTH>\fR
+Calendar month, e.g. 2025\-08
+.TP
+\fB\-\-for\fR \fI<FOR_STR>\fR
+Natural language window, e.g. "last week" or "every month for the last 6 months"
+.TP
+\fB\-\-since\fR \fI<SINCE>\fR
+Custom since (Git approxidate ok); must be paired with \-\-until
+.TP
+\fB\-\-until\fR \fI<UNTIL>\fR
+Custom until (exclusive); must be paired with \-\-since
+.TP
+\fB\-\-simple\fR
+Single JSON output (quick)
+.TP
+\fB\-\-full\fR
+Sharded output (per\-commit files + manifest)
+.TP
+\fB\-\-include\-merges\fR
+Include merge commits
+.TP
+\fB\-\-include\-patch\fR
+Embed unified patches in JSON (big)
+.TP
+\fB\-\-max\-patch\-bytes\fR \fI<MAX_PATCH_BYTES>\fR [default: 0]
+Per\-commit patch cap (0 = no limit)
+.TP
+\fB\-\-save\-patches\fR \fI<SAVE_PATCHES>\fR
+Directory to write .patch files (referenced in JSON)
+.TP
+\fB\-\-split\-out\fR \fI<SPLIT_OUT>\fR
+Base directory for sharded output (full mode). If omitted, auto\-named
+.TP
+\fB\-\-out\fR \fI<OUT>\fR [default: \-]
+File for \-\-simple (default stdout "\-")
+.TP
+\fB\-\-github\-prs\fR
+Try to enrich with GitHub PRs (quietly ignored if not available)
+.TP
+\fB\-\-include\-unmerged\fR
+Scan local branches for commits in the window not reachable from HEAD; include separately
+.TP
+\fB\-\-tz\fR \fI<TZ>\fR [default: local]
+Timezone for local ISO timestamps in output (label only)
+.br
+
+.br
+[\fIpossible values: \fRlocal, utc]
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.1.0

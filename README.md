@@ -31,6 +31,23 @@ Export Git activity into structured JSON—either a single file (simple mode) or
   # now you can use: git activity-report --help
   ```
 
+- Rust binary (local dev install):
+
+  ```bash
+  just install
+  # now you can use: git-activity-report --help
+  ```
+
+- Man page:
+
+  ```bash
+  just man           # writes docs/man/git-activity-report.1
+  just man-install   # installs into ~/.local/share/man/man1
+  man git-activity-report
+  ```
+
+  The binary is named `git-activity-report`, so it also works as a Git subcommand: `git activity-report ...`.
+
 > Optional: set `GITHUB_TOKEN` or authenticate `gh` for PR enrichment.
 
 ## Quick start

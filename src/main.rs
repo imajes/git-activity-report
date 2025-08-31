@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -87,6 +87,10 @@ struct Cli {
   /// Timezone for local ISO timestamps in output (label only)
   #[arg(long, value_enum, default_value_t = Tz::Local)]
   tz: Tz,
+
+  /// Emit a troff man page to stdout (internal; for packaging)
+  #[arg(long, hide = true)]
+  gen_man: bool,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -225,6 +229,17 @@ fn build_full_params(cfg: &EffectiveConfig, since: String, until: String) -> ren
 
 fn main() -> Result<()> {
   let cli = Cli::parse();
+
+  if cli.gen_man {
+    let mut cmd = Cli::command();
+    // Render a section-1 man page
+    let man = clap_mangen::Man::new(cmd);
+    let mut buf: Vec<u8> = Vec::new();
+    man.render(&mut buf).expect("render manpage");
+    print!("{}", String::from_utf8_lossy(&buf));
+    return Ok(());
+  }
+
   run_with_cli(cli)
 }
 

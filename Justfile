@@ -15,6 +15,9 @@ RUST_BIN := "target/debug/git-activity-report"
 _help:
   @echo "Recipes:"
   @echo "  build         # cargo build"
+  @echo "  install       # build release and copy binary to ~/bin"
+  @echo "  man           # generate man page to docs/man/git-activity-report.1"
+  @echo "  man-install   # install man page to ~/.local/share/man/man1"
   @echo "  test          # cargo test"
   @echo "  fmt           # cargo fmt --check"
   @echo "  clippy        # cargo clippy -D warnings"
@@ -42,6 +45,30 @@ fmt:
 
 clippy:
   cargo clippy -- -D warnings
+
+# Install release binary into ~/bin
+install:
+  # Build optimized binary
+  cargo build --release
+  # Ensure ~/bin exists
+  mkdir -p "$HOME/bin"
+  # Copy the binary with execute permissions
+  install -m 0755 target/release/git-activity-report "$HOME/bin/git-activity-report"
+  echo "Installed to $HOME/bin/git-activity-report"
+  echo "Ensure $HOME/bin is on your PATH (e.g., add: export PATH=\"$HOME/bin:$PATH\")"
+
+# Generate man page into docs/man
+man:
+  mkdir -p docs/man
+  cargo run --quiet -- --gen-man > docs/man/git-activity-report.1
+  echo "Wrote docs/man/git-activity-report.1"
+
+# Install man page into user manpath (~/.local/share/man/man1)
+man-install: man
+  mkdir -p "$HOME/.local/share/man/man1"
+  install -m 0644 docs/man/git-activity-report.1 "$HOME/.local/share/man/man1/git-activity-report.1"
+  echo "Installed to $HOME/.local/share/man/man1/git-activity-report.1"
+  echo "Tip: update MANPATH if needed, e.g.: export MANPATH=\"$HOME/.local/share/man:$MANPATH\""
 
 # Sample: print normalized config for a simple window
 run-simple: build
