@@ -100,18 +100,13 @@ git activity-report --full --for "last month" \
 
 ## Testing & validation
 
-A `Justfile` provides validation using `ajv-cli` (Draft 2020‑12):
+- Run the test suite (unit, integration, snapshots, and JSON Schema validation):
 
 ```bash
-just validate-all
+just test
 ```
 
-Fixtures and schemas:
-
-```
-./tests/schemas/*.json
-./tests/fixtures/*.json
-```
+- Schemas live under `tests/schemas/*.json` and are validated in-process via Rust tests (no external `ajv` required).
 
 ## Examples
 
@@ -130,7 +125,7 @@ git activity-report --simple --since "2 weeks ago" --until "yesterday" --repo . 
 
 ## Troubleshooting
 
-* **Schema validation fails**: confirm you used the current schema (`tests/schemas/.....`) and `ajv --spec=draft2020`.
+* **Schema validation fails**: review failing test output from `tests/schema_validation.rs`; ensure schemas under `tests/schemas/*.json` match the produced output.
 * **No PRs attached**: ensure `GITHUB_TOKEN` is set or `gh auth status` is valid.
 * **No unmerged commits**: verify you actually have local branches with unique commits in the window.
 * **Timestamps look wrong**: remember the ISO strings include the local offset; set `--tz utc` if you prefer UTC rendering.

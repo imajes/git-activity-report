@@ -11,7 +11,7 @@ body:
   - type: textarea
     attributes:
       label: Reproduction steps
-      description: Include exact commands and sample repos/fixtures if possible
+      description: Include exact commands and sample repos if possible
       value: |
         1.
         2.
@@ -28,5 +28,4 @@ body:
     attributes:
       label: Checks
       options:
-        - label: I ran `just validate-all` and included errors
         - label: I ran `just test` and included diffs

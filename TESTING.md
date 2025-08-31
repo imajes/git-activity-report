@@ -7,7 +7,7 @@ Here’s the pragmatic Rust take.
 - **Doctests → in your docs.** Treat code blocks in `///` as executable examples; they compile under `cargo test`.
 - **Examples → `examples/`.** Runnable “how to use it” programs; great as living docs and targets for smoke testing.
 - **Shared test helpers → `tests/common/`.** Put `tests/common/mod.rs` with utilities and `mod common;` from each test file.
-- **Fixtures → `tests/fixtures/` or embed.** Use `include_str!`/`include_bytes!` for small data; file paths via `env!("CARGO_MANIFEST_DIR")`.
+- **Deterministic repo setup** via nextest: tests/scripts/nextest/setup-fixture.sh creates a tiny repo once per run; tests consume its path from env.
 - **Bin crates → extract a lib.** Move logic to `src/lib.rs` so integration tests can import it cleanly.
 
 ---
@@ -24,7 +24,7 @@ my_crate/
 │  ├─ api_happy_path.rs
 │  ├─ error_cases.rs
 │  └─ common/
-│     └─ mod.rs      # shared helpers, fixtures, tempdir setup, etc.
+│     └─ mod.rs      # shared helpers, nextest fixture repo, tempdir setup, etc.
 ├─ examples/
 │  └─ quickstart.rs
 └─ benches/           # (optional) Criterion benchmarks

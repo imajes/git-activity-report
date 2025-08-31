@@ -12,26 +12,15 @@ This document captures concrete next steps, with a focus on a faithful Rust port
 
 - Keep **Schema v2** as-is (timestamps live under `commit.timestamps` with `author`, `commit`, `author_local`, `commit_local`, `timezone`).
 - Do **not** add new fields before the Rust MVP. If you want a field like `schema_version`, add it **after** M2 and bump schemas to `v2.1`.
-- Ensure all schemas declare Draft 2020-12 and are validated with `ajv --spec=draft2020`.
+- Ensure all schemas declare Draft 2020-12 and are validated by Rust tests (jsonschema crate).
 
-### 0.2 Lock fixtures (goldens)
+### 0.2 Lock structure via snapshots
 
-- Minimal set (already present):
+- Add `insta` snapshots (with redactions) to lock JSON structure for CLI/simple, manifest, and a sample shard.
 
-  - `git-activity-report.simple.fixture.json`
-  - `manifest.json` (top manifest)
-  - `manifest-2025-08.json` (range manifest)
-  - Two commit shards: `2025.08.12-14.03-aaaaaaaaaaaa.json`, `2025.08.13-09.12-bbbbbbbbbbbb.json`
+### 0.3 Deterministic test repo
 
-- Add **edge-case** goldens (commit a small synthetic repo to produce them):
-
-  - **rename**: an `R###` entry with `old_path`
-  - **merge commit**: include with `--include-merges`
-  - **binary/huge patch**: run with `--include-patch --max-patch-bytes 4096` to capture a clipped patch (`patch_clipped: true`)
-
-### 0.3 Fixture generator (script)
-
-Create `tests/scripts/make-fixture-repo.sh` to build a tiny repository deterministically and emit fresh fixtures when needed:
+Use `tests/scripts/nextest/setup-fixture.sh` to build a tiny repository deterministically for tests:
 
 ```bash
 #!/usr/bin/env bash
@@ -68,51 +57,16 @@ echo "A=$A_SHA B=$B_SHA"
 # Back to main for HEAD view
 git checkout -q -b main
 
-# Run the tool in both modes to produce fixtures under tests/fixtures
-cd "$ROOT"
-mkdir -p tests/fixtures
-
-# Simple
-git activity-report --simple --since "2025-08-01" --until "2025-09-01" --repo "$TMP" > tests/fixtures/git-activity-report.simple.fixture.json
-
-# Full
-mkdir -p tests/fixtures/full_out
-git activity-report --full --since "2025-08-01" --until "2025-09-01" \
-  --repo "$TMP" --split-out tests/fixtures/full_out --include-unmerged
-# Copy out the interesting files into fixtures
-cp tests/fixtures/full_out/manifest.json tests/fixtures/
-cp tests/fixtures/full_out/manifest-2025-08.json tests/fixtures/
-cp tests/fixtures/full_out/2025-08/2025.08.12-14.03-*.json tests/fixtures/2025.08.12-14.03-aaaaaaaaaaaa.json || true
-cp tests/fixtures/full_out/2025-08/unmerged/feature__alpha/2025.08.13-09.12-*.json tests/fixtures/2025.08.13-09.12-bbbbbbbbbbbb.json || true
+echo "Fixture repo at: $TMP" > tests/.tmp/tmpdir
 
 echo "Fixture repo at: $TMP"
 ```
 
-Add a Just recipe:
+Nextest setup is configured in `.config/nextest.toml` and runs automatically under `just test`.
 
-```just
-build-fixtures:
-  bash tests/scripts/make-fixture-repo.sh
-```
+### 0.4 Validation
 
-### 0.4 Validation & goldens
-
-Wire the following Just recipes (or keep your current ones):
-
-- `validate-all` — Ajv validation for all schemas/fixtures.
-- `golden` — quick diff against stored fixtures with stable key order:
-
-```just
-golden:
-  set -euo pipefail
-  mkdir -p .tmp
-  # Re-run simple on the fixture repo path if known; otherwise skip.
-  # Example assumes tests/scripts saved TMP path to .tmp/tmpdir
-  if [ -f .tmp/tmpdir ]; then REPO=$$(cat .tmp/tmpdir); else echo "(hint) run build-fixtures first"; exit 0; fi
-  git activity-report --simple --since "2025-08-01" --until "2025-09-01" --repo $$REPO > .tmp/simple.json
-  diff -u <(jq -S . tests/fixtures/git-activity-report.simple.fixture.json) <(jq -S . .tmp/simple.json)
-  echo "golden OK"
-```
+Schema validation is performed in Rust tests (`tests/schema_validation.rs`). Run `just test`.
 
 ### 0.5 CI
 
@@ -126,10 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
-      - run: npm i -g ajv-cli@5 jq
-      - run: just validate-all
+      - run: just test
 ```
 
 (If you want golden diffs in CI, add a deterministic fixture repo script and run `just build-fixtures && just validate-all`.)
@@ -279,7 +230,7 @@ version-snap:
 ### Tests
 
 - **Golden tests**: run the Python tool on tiny test repos (via a fixture script), capture JSON, run Rust, compare.
-- **Schema validation**: validate Rust outputs with the same `tests/schemas/*.json` using `ajv` in CI.
+- **Schema validation**: validated in Rust tests using the `jsonschema` crate.
 - **Pathological cases**: binary files in diffs, huge patches with clipping, renames (`R###`), copies (`C###`).
 
 ### Packaging
@@ -315,7 +266,7 @@ version-snap:
 
 ## 4) Acceptance criteria for the Rust port
 
-- `just validate-all` passes on Rust‑generated outputs across sample repos.
+- `just test` passes on Rust‑generated outputs across sample repos.
 - Byte‑for‑byte field parity on all required props; ordering of arrays matches Python output where applicable.
 - Performance: ≥2× faster than Python reference on a 5k‑commit window (same machine), measured with patches off and on.
 - UX: `--help` includes examples mirroring README.

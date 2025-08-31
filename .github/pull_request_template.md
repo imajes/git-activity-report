@@ -5,16 +5,13 @@ Summary
 
 Changes
 - Flags/CLI: list any new or changed flags.
-- Schemas/fixtures: note any schema or fixture updates (and why).
+- Schema changes (if any) and rationale.
 - Rust/Python parity: note if behavior differs intentionally.
 
 Validation
 - Commands to reproduce locally:
-  - just build-fixtures
-  - just validate-all
   - just test
-- Sample runs:
-  - python3 ./git-activity-report.py ...
+- Optional sample runs:
   - cargo run -- ...
 
 Risk/Impact
@@ -22,6 +19,6 @@ Risk/Impact
 
 Checklist
 - [ ] Docs updated (README/NEXT_STEPS as needed)
-- [ ] Schemas/fixtures updated and validated (just validate-all)
+- [ ] Schema changes covered by tests/snapshots (if applicable)
 - [ ] Tests updated/passing (>=90% where applicable)
 - [ ] Clippy/rustfmt clean

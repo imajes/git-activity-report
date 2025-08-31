@@ -13,7 +13,7 @@ body:
   - type: textarea
     attributes:
       label: Output/Schema impact
-      description: Which schemas/fixtures might change? Include examples
+      description: Which schemas might change? Include examples
   - type: checkboxes
     attributes:
       label: Backwards compatibility
