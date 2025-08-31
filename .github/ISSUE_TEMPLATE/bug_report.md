@@ -2,13 +2,14 @@ name: Bug report
 description: Report a problem with git-activity-report
 labels: [bug]
 body:
-  - type: textarea
+
+- type: textarea
     attributes:
       label: Summary
       description: What happened? What did you expect?
     validations:
       required: true
-  - type: textarea
+- type: textarea
     attributes:
       label: Reproduction steps
       description: Include exact commands and sample repos if possible
@@ -16,15 +17,15 @@ body:
         1.
         2.
         3.
-  - type: textarea
+- type: textarea
     attributes:
       label: Environment
       description: OS, Python/Rust versions, Git version
-  - type: textarea
+- type: textarea
     attributes:
       label: Logs/output
       description: Relevant stderr/stdout, validation errors, or stack traces
-  - type: checkboxes
+- type: checkboxes
     attributes:
       label: Checks
       options:

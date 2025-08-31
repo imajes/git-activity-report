@@ -53,9 +53,12 @@ run-full: build
 
 ## Legacy validations and fixture flows removed in favor of Rust-side schema tests.
 
-# Spacing audit (reports potential misses; manual fixes per SPACING.md)
+# Spacing audit (reports potential misses; manual fixes per docs/SPACING.md)
 audit-spacing:
   bash scripts/spacing-audit.sh normal src
 
 audit-spacing-strict:
   bash scripts/spacing-audit.sh strict src
+
+lint-md:
+  markdownlint-cli2 --fix "**/*.md"
