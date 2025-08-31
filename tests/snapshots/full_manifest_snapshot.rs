@@ -8,7 +8,7 @@ fn full_manifest_snapshot() {
   let tmpdir = tempfile::TempDir::new().unwrap();
 
   let params = FullParams {
-    repo: repo.path().to_string_lossy().to_string(),
+    repo: repo.to_string_lossy().to_string(),
     label: Some("window".into()),
     since: "2025-08-01".into(),
     until: "2025-09-01".into(),
@@ -36,4 +36,3 @@ fn full_manifest_snapshot() {
     ".authors" => insta::sorted_redaction(),
   });
 }
-

@@ -6,7 +6,7 @@ use git_activity_report::render::{run_simple, SimpleParams};
 fn simple_report_snapshot() {
   let repo = common::fixture_repo();
   let params = SimpleParams {
-    repo: repo.path().to_string_lossy().to_string(),
+    repo: repo.to_string_lossy().to_string(),
     since: "2025-08-01".into(),
     until: "2025-09-01".into(),
     include_merges: true,
@@ -27,4 +27,3 @@ fn simple_report_snapshot() {
     ".authors" => insta::sorted_redaction(),
   });
 }
-

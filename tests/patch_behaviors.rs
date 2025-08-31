@@ -1,11 +1,11 @@
 mod common;
-use std::process::Command;
+use assert_cmd::Command;
 
 #[test]
 fn simple_patch_clipping_sets_flag() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
-  let mut cmd = Command::new(common::bin_path());
+  let repo_path = repo.to_str().unwrap();
+  let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
     "--simple",
     "--since",
@@ -29,9 +29,9 @@ fn simple_patch_clipping_sets_flag() {
 #[test]
 fn simple_save_patches_sets_local_path() {
   let repo = common::fixture_repo();
-  let repo_path = repo.path().to_str().unwrap();
+  let repo_path = repo.to_str().unwrap();
   let patch_dir = tempfile::TempDir::new().unwrap();
-  let mut cmd = Command::new(common::bin_path());
+  let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
     "--simple",
     "--since",
