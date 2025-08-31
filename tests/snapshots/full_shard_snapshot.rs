@@ -18,7 +18,7 @@ fn snapshot_first_shard_commit() {
       "2025-09-01",
       "--repo",
       repo_path,
-      "--split-out",
+      "--out",
       out_path,
       "--include-merges",
     ])

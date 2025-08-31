@@ -18,7 +18,7 @@ fn cli_full_top_and_manifest_snapshot() {
       "2025-09-01",
       "--repo",
       repo_path,
-      "--split-out",
+      "--out",
       out_path,
       "--tz",
       "utc",

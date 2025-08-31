@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use chrono::{Datelike, Local, NaiveDate, Timelike};
+use chrono::{DateTime, Datelike, Local, NaiveDate, Timelike};
 use chrono_english::{Interval, parse_duration};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -106,24 +106,20 @@ fn iso_naive(dt: chrono::DateTime<chrono::Local>) -> String {
   dt.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
-#[cfg(not(test))]
-fn current_local_now() -> chrono::DateTime<chrono::Local> {
-  Local::now()
-}
-
-#[cfg(test)]
-fn current_local_now() -> chrono::DateTime<chrono::Local> {
-  if let Ok(s) = std::env::var("GAR_TEST_NOW") {
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
-      return dt.with_timezone(&Local);
-    }
-    if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
-      if let Some(local_dt) = ndt.and_local_timezone(Local).single() {
-        return local_dt;
-      }
-    }
-  }
-  Local::now()
+/// Parse a `--now-override` string into a local DateTime.
+/// Accepts RFC3339 (e.g. 2025-08-15T12:00:00Z) or a naive local timestamp
+/// formatted as `%Y-%m-%dT%H:%M:%S`.
+pub fn parse_now_override(s: Option<&str>) -> Option<DateTime<Local>> {
+  s.and_then(|raw| {
+    chrono::DateTime::parse_from_rfc3339(raw)
+      .ok()
+      .map(|dt| dt.with_timezone(&Local))
+      .or_else(|| {
+        chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S")
+          .ok()
+          .and_then(|ndt| ndt.and_local_timezone(Local).single())
+      })
+  })
 }
 
 /// Compute range for a natural-language phrase, with optional `now` override for tests.

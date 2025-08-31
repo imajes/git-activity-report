@@ -59,7 +59,7 @@ fn full_manifest_conforms_to_schema_and_shards_conform() {
       "2025-09-01",
       "--repo",
       repo_path,
-      "--split-out",
+      "--out",
       out_path,
       "--include-merges",
       "--include-unmerged",

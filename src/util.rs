@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use chrono::{Local, SecondsFormat, TimeZone, Utc};
+use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
+use clap::CommandFactory;
 
 pub fn canonicalize_lossy<P: AsRef<Path>>(p: P) -> String {
   let p = p.as_ref();
@@ -47,11 +48,31 @@ pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
   }
 }
 
+/// Returns the effective "now" given an optional override.
+///
+/// When `override_now` is `Some`, that instant is returned; otherwise
+/// the current local time is used. Centralizes our handling of test
+/// determinism without sprinkling `Local::now()` throughout the code.
+pub fn effective_now(override_now: Option<DateTime<Local>>) -> DateTime<Local> {
+  override_now.unwrap_or_else(Local::now)
+}
+
+/// Render a section-1 man page for a clap `CommandFactory` implementor.
+/// Returns the troff content as a UTF-8 string.
+pub fn render_man_page<T: CommandFactory>() -> anyhow::Result<String> {
+  let cmd = T::command();
+  let man = clap_mangen::Man::new(cmd);
+  let mut buf: Vec<u8> = Vec::new();
+  man.render(&mut buf)?;
+  Ok(String::from_utf8_lossy(&buf).to_string())
+}
+
 // JSON extension helpers are in `crate::ext::serde_json`.
 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use clap::Parser;
 
   #[test]
   fn short_sha_truncates() {
@@ -80,5 +101,16 @@ mod tests {
     let err = run_git(".", &["definitely-not-a-real-subcommand".into()]).unwrap_err();
     let msg = format!("{:#}", err);
     assert!(msg.contains("git"));
+  }
+
+  #[derive(Parser, Debug)]
+  #[command(name = "dummy", version, about = "Dummy CLI", long_about = None)]
+  struct DummyCli;
+
+  #[test]
+  fn render_man_page_produces_troff_text() {
+    let page = render_man_page::<DummyCli>().expect("render manpage");
+    assert!(page.contains(".TH"));
+    assert!(page.to_lowercase().contains("dummy"));
   }
 }

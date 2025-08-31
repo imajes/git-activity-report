@@ -16,7 +16,7 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
     "2025-09-01",
     "--repo",
     repo_path,
-    "--split-out",
+    "--out",
     out_path,
     "--include-merges",
     "--include-unmerged",
@@ -90,15 +90,7 @@ fn full_mode_month_label_and_manifest_filename() {
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.args([
-    "--full",
-    "--month",
-    "2025-08",
-    "--repo",
-    repo_path,
-    "--split-out",
-    out_path,
-  ]);
+  cmd.args(["--full", "--month", "2025-08", "--repo", repo_path, "--out", out_path]);
   let output = cmd.output().unwrap();
   assert!(output.status.success());
   let top: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();

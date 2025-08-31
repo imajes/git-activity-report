@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -12,7 +12,7 @@ mod util;
 mod window;
 
 use crate::window::{Tz, WindowSpec};
-use chrono::Local;
+// util module imported via `mod util;` — call with `crate::util::...` directly.
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -69,11 +69,9 @@ struct Cli {
   #[arg(long)]
   save_patches: Option<PathBuf>,
 
-  /// Base directory for sharded output (full mode). If omitted, auto-named.
-  #[arg(long)]
-  split_out: Option<PathBuf>,
-
-  /// File for --simple (default stdout "-")
+  /// Output location:
+  /// - in --simple mode: file path (default: stdout "-")
+  /// - in --full mode: base directory for shards (default: auto-named temp dir)
   #[arg(long, default_value = "-")]
   out: String,
 
@@ -113,7 +111,6 @@ pub struct EffectiveConfig {
   include_patch: bool,
   max_patch_bytes: usize,
   save_patches: Option<String>,
-  split_out: Option<String>,
   out: String,
   github_prs: bool,
   include_unmerged: bool,
@@ -145,11 +142,6 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     (false, false) => Mode::Simple,
   };
 
-  // Gentle note if --out is provided in full mode
-  if matches!(mode, Mode::Full) && cli.out != "-" {
-    eprintln!("note: --out is ignored in --full mode (writing shards + manifest)");
-  }
-
   let repo = util::canonicalize_lossy(&cli.repo);
 
   Ok(EffectiveConfig {
@@ -160,7 +152,6 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     include_patch: cli.include_patch,
     max_patch_bytes: cli.max_patch_bytes,
     save_patches: cli.save_patches.as_deref().map(util::canonicalize_lossy),
-    split_out: cli.split_out.as_deref().map(util::canonicalize_lossy),
     out: cli.out,
     github_prs: cli.github_prs,
     include_unmerged: cli.include_unmerged,
@@ -174,16 +165,17 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
 
   // If --for is a multi-bucket phrase, handle top-manifest orchestration
   if let WindowSpec::ForPhrase { phrase } = &cfg.window {
-    let now_opt = parse_now_override(&cfg);
+    let now_opt = window::parse_now_override(cfg.now_override.as_deref());
     if let Some(buckets) = window::for_phrase_buckets(phrase, now_opt) {
       let is_full = matches!(cfg.mode, Mode::Full);
       // Choose top directory
-      let base_dir = if let Some(dir) = &cfg.split_out {
-        dir.clone()
+      let base_dir = if cfg.out != "-" {
+        cfg.out.clone()
       } else {
         let tmp = std::env::temp_dir();
+        let eff_now = util::effective_now(now_opt);
         tmp
-          .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
+          .join(format!("activity-{}", eff_now.format("%Y%m%d-%H%M%S")))
           .to_string_lossy()
           .to_string()
       };
@@ -193,7 +185,7 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
       let mut top = serde_json::json!({
         "repo": cfg.repo,
         "multi": true,
-        "generated_at": Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+        "generated_at": util::effective_now(now_opt).format("%Y-%m-%dT%H:%M:%S").to_string(),
         "mode": if is_full { "full" } else { "simple" },
         "include_merges": cfg.include_merges,
         "include_patch": cfg.include_patch,
@@ -208,6 +200,7 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
           let params = render::FullParams {
             split_out: Some(base_dir.clone()),
             label: Some(b.label.clone()),
+            now_local: now_opt,
             ..params
           };
           let result = render::run_full(&params)?;
@@ -250,7 +243,8 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
   }
 
   // Shared: compute window bounds once
-  let (since, until) = window::compute_window_strings(&cfg.window, parse_now_override(&cfg))?;
+  let now_opt = window::parse_now_override(cfg.now_override.as_deref());
+  let (since, until) = window::compute_window_strings(&cfg.window, now_opt)?;
 
   // Generate the report JSON value in the match
   let (json, allow_file_output) = match cfg.mode {
@@ -260,7 +254,8 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
       (serde_json::to_value(&report)?, true)
     }
     Mode::Full => {
-      let params = build_full_params(&cfg, since.clone(), until.clone());
+      let mut params = build_full_params(&cfg, since.clone(), until.clone());
+      params.now_local = now_opt;
       let res = render::run_full(&params)?;
       (res, false) // file output is ignored in full mode
     }
@@ -276,23 +271,7 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
   Ok(())
 }
 
-fn parse_now_override(cfg: &EffectiveConfig) -> Option<chrono::DateTime<chrono::Local>> {
-  cfg
-    .now_override
-    .as_ref()
-    .and_then(|s| {
-      chrono::DateTime::parse_from_rfc3339(s)
-        .ok()
-        .map(|dt| dt.with_timezone(&chrono::Local))
-    })
-    .or_else(|| {
-      cfg
-        .now_override
-        .as_ref()
-        .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").ok())
-        .and_then(|ndt| ndt.and_local_timezone(chrono::Local).single())
-    })
-}
+// hidden in util/window, see window::parse_now_override
 
 fn build_simple_params(cfg: &EffectiveConfig, since: String, until: String) -> render::SimpleParams {
   render::SimpleParams {
@@ -322,10 +301,11 @@ fn build_full_params(cfg: &EffectiveConfig, since: String, until: String) -> ren
     include_patch: cfg.include_patch,
     max_patch_bytes: cfg.max_patch_bytes,
     tz_local: matches!(cfg.tz, Tz::Local),
-    split_out: cfg.split_out.clone(),
+    split_out: if cfg.out != "-" { Some(cfg.out.clone()) } else { None },
     include_unmerged: cfg.include_unmerged,
     save_patches: cfg.save_patches.is_some(),
     github_prs: cfg.github_prs,
+    now_local: None,
   }
 }
 
@@ -333,12 +313,8 @@ fn main() -> Result<()> {
   let cli = Cli::parse();
 
   if cli.gen_man {
-    let cmd = Cli::command();
-    // Render a section-1 man page
-    let man = clap_mangen::Man::new(cmd);
-    let mut buf: Vec<u8> = Vec::new();
-    man.render(&mut buf).expect("render manpage");
-    print!("{}", String::from_utf8_lossy(&buf));
+    let page = util::render_man_page::<Cli>()?;
+    print!("{}", page);
     return Ok(());
   }
 
@@ -363,7 +339,6 @@ mod tests {
       include_patch: false,
       max_patch_bytes: 0,
       save_patches: None,
-      split_out: None,
       out: "-".into(),
       github_prs: false,
       include_unmerged: false,

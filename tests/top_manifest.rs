@@ -28,7 +28,7 @@ fn full_top_manifest_schema_validates_and_files_exist() {
       "every month for the last 2 months",
       "--repo",
       repo_path,
-      "--split-out",
+      "--out",
       out_path,
     ])
     .output()
@@ -75,7 +75,7 @@ fn simple_top_manifest_writes_files() {
       "every week for the last 2 weeks",
       "--repo",
       repo_path,
-      "--split-out",
+      "--out",
       out_path,
     ])
     .output()

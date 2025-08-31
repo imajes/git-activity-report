@@ -33,7 +33,7 @@ fn month_simple_smoke() {
 }
 
 #[test]
-fn full_mode_warns_out_ignored() {
+fn full_mode_accepts_out_dir() {
   let repo = common::init_fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
@@ -44,10 +44,11 @@ fn full_mode_warns_out_ignored() {
     "--repo",
     repo_path,
     "--out",
-    "some.json",
+    "tests/.tmp/activity-report",
   ]);
   let out = cmd.output().unwrap();
   assert!(out.status.success());
+  // Should not warn about ignoring --out in full mode anymore
   let err = String::from_utf8_lossy(&out.stderr);
-  assert!(err.contains("--out is ignored in --full mode"));
+  assert!(!err.contains("ignored"));
 }

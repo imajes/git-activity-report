@@ -62,7 +62,7 @@ Full, last month, sharded, with PR enrichment and patches saved:
 
 ```bash
 git activity-report --full --for "last month" \
-  --split-out out/last-month \
+  --out out/last-month \
   --github-prs \
   --save-patches out/last-month/patches
 ```
@@ -83,8 +83,7 @@ git activity-report --full --for "last month" \
 
 - Output paths:
 
-  - `--out FILE` (simple mode, default stdout)
-  - `--split-out DIR` (full mode base directory)
+  - `--out`: in simple mode, a file path (default stdout "-"); in full mode, a base directory for shards (default: auto-named temp dir)
 
 - Integrations: `--github-prs`
 - Unmerged work: `--include-unmerged`
@@ -135,7 +134,17 @@ just test
 
 ```bash
 git activity-report --full --for "every month for the last 6 months" \
-  --repo . --split-out out/last6 --github-prs --include-unmerged
+  --repo . --out out/last6 --github-prs --include-unmerged
+
+## Testing: freezing time
+
+- For deterministic testing of natural-language windows, use the hidden flag `--now-override` with either RFC3339 (e.g., `2025-08-15T12:00:00Z`) or a local naive time (e.g., `2025-08-15T12:00:00`).
+- Example:
+
+```bash
+git activity-report --simple --for "last week" --repo . --tz utc \
+  --now-override 2025-08-15T12:00:00
+```
 ```
 
 - Simple JSON for a custom window using approxidate:

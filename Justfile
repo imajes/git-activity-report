@@ -80,7 +80,7 @@ run-simple: build
 
 # Sample: print normalized config for a full window
 run-full: build
-  {{RUST_BIN}} --full --month 2025-08 --split-out .tmp/out
+  {{RUST_BIN}} --full --month 2025-08 --out .tmp/out
 
 ## Legacy validations and fixture flows removed in favor of Rust-side schema tests.
 

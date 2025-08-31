@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::{Local, TimeZone, Utc};
+use chrono::{DateTime, Local, TimeZone, Utc};
 
 use crate::enrich;
 use crate::gitio;
@@ -42,6 +42,7 @@ pub struct FullParams {
   pub include_unmerged: bool,
   pub save_patches: bool,
   pub github_prs: bool,
+  pub now_local: Option<DateTime<Local>>,
 }
 
 // --- Internal Context for Processing ---
@@ -288,8 +289,9 @@ pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
     dir.clone()
   } else {
     let tmp = std::env::temp_dir();
+    let now_for_dir = params.now_local.unwrap_or_else(Local::now);
     tmp
-      .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
+      .join(format!("activity-{}", now_for_dir.format("%Y%m%d-%H%M%S")))
       .to_string_lossy()
       .to_string()
   };
@@ -574,6 +576,7 @@ mod tests {
       include_unmerged: true,
       save_patches: true,
       github_prs: false,
+      now_local: None,
     };
     let out = run_full(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -599,6 +602,7 @@ mod tests {
       include_unmerged: false,
       save_patches: false,
       github_prs: true,
+      now_local: None,
     };
     let out = run_full(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -624,6 +628,7 @@ mod tests {
       include_unmerged: false,
       save_patches: false,
       github_prs: false,
+      now_local: None,
     };
     let out = run_full(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -671,6 +676,7 @@ mod tests {
       include_unmerged: true,
       save_patches: false,
       github_prs: false,
+      now_local: None,
     };
     let out = run_full(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
