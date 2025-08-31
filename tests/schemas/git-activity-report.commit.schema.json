@@ -164,10 +164,7 @@
           "type": "boolean"
         },
         "git_show_cmd": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "type": "string"
         },
         "local_patch_file": {
           "type": [
