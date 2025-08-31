@@ -1,14 +1,17 @@
 use anyhow::{Context, Result, bail};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 mod enrich;
+mod ext;
 mod gitio;
 mod model;
 mod render;
 mod util;
-mod ext;
+mod window;
+
+use crate::window::{Tz, WindowSpec};
 
 /// CLI entry — parses flags, normalizes config, and (for now) prints the
 /// normalized configuration as JSON. This compiles cleanly and is ready
@@ -86,26 +89,10 @@ struct Cli {
   tz: Tz,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-#[value(rename_all = "lowercase")]
-pub enum Tz {
-  Local,
-  Utc,
-}
-
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Mode {
   Simple,
   Full,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum WindowSpec {
-  Month { ym: String },
-  ForPhrase { phrase: String },
-  SinceUntil { since: String, until: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,37 +109,6 @@ pub struct EffectiveConfig {
   github_prs: bool,
   include_unmerged: bool,
   pub tz: Tz,
-}
-
-fn month_bounds(year_month: &str) -> Result<(String, String)> {
-  let parts: Vec<&str> = year_month.split('-').collect();
-
-  if parts.len() != 2 {
-    bail!("invalid --month, expected YYYY-MM");
-  }
-  let y: i32 = parts[0].parse().context("parsing year in --month")?;
-  let m: i32 = parts[1].parse().context("parsing month in --month")?;
-
-  if !(1..=12).contains(&m) {
-    bail!("invalid month in --month");
-  }
-  let next_y = if m == 12 { y + 1 } else { y };
-  let next_m = if m == 12 { 1 } else { m + 1 };
-
-  Ok((
-    format!("{y:04}-{m:02}-01T00:00:00"),
-    format!("{next_y:04}-{next_m:02}-01T00:00:00"),
-  ))
-}
-
-pub fn compute_window_strings(cfg: &EffectiveConfig) -> Result<(String, String)> {
-  match &cfg.window {
-    WindowSpec::SinceUntil { since, until } => Ok((since.clone(), until.clone())),
-    WindowSpec::Month { ym } => month_bounds(ym),
-    WindowSpec::ForPhrase { .. } => {
-      bail!("--for phrase windows not implemented in Rust port yet; use --month or --since/--until")
-    }
-  }
 }
 
 fn normalize(cli: Cli) -> Result<EffectiveConfig> {
@@ -202,61 +158,123 @@ fn normalize(cli: Cli) -> Result<EffectiveConfig> {
   })
 }
 
-fn main() -> Result<()> {
-  let cli = Cli::parse();
+pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
   let cfg = normalize(cli).context("validating CLI flags")?;
 
-  match cfg.mode {
+  // Shared: compute window bounds once
+  let (since, until) = window::compute_window_strings(&cfg.window)?;
+
+  // Generate the report JSON value in the match
+  let (json, allow_file_output) = match cfg.mode {
     Mode::Simple => {
-      let (since, until) = compute_window_strings(&cfg)?;
-      let params = render::SimpleParams {
-        repo: cfg.repo.clone(),
-        since,
-        until,
-        include_merges: cfg.include_merges,
-        include_patch: cfg.include_patch,
-        max_patch_bytes: cfg.max_patch_bytes,
-        tz_local: matches!(cfg.tz, Tz::Local),
-        save_patches_dir: cfg.save_patches.clone(),
-        github_prs: cfg.github_prs,
-      };
-
+      let params = build_simple_params(&cfg, since.clone(), until.clone());
       let report = render::run_simple(&params)?;
-
-      if cfg.out == "-" {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-      } else {
-        std::fs::write(&cfg.out, serde_json::to_vec_pretty(&report)?)?;
-      }
-
-      Ok(())
+      (serde_json::to_value(&report)?, true)
     }
     Mode::Full => {
-      let (since, until) = compute_window_strings(&cfg)?;
-      let label = match &cfg.window {
-        WindowSpec::Month { ym } => Some(ym.clone()),
-        _ => Some("window".into()),
-      };
-      let params = render::FullParams {
-        repo: cfg.repo.clone(),
-        label,
-        since,
-        until,
-        include_merges: cfg.include_merges,
-        include_patch: cfg.include_patch,
-        max_patch_bytes: cfg.max_patch_bytes,
-        tz_local: matches!(cfg.tz, Tz::Local),
-        split_out: cfg.split_out.clone(),
-        include_unmerged: cfg.include_unmerged,
-        save_patches: cfg.save_patches.is_some(),
-        github_prs: cfg.github_prs,
-      };
-
+      let params = build_full_params(&cfg, since.clone(), until.clone());
       let res = render::run_full(&params)?;
+      (res, false) // file output is ignored in full mode
+    }
+  };
 
-      println!("{}", serde_json::to_string_pretty(&res)?);
+  // Shared: final output step
+  if allow_file_output && cfg.out != "-" {
+    std::fs::write(&cfg.out, serde_json::to_vec_pretty(&json)?)?;
+  } else {
+    println!("{}", serde_json::to_string_pretty(&json)?);
+  }
 
-      Ok(())
+  Ok(())
+}
+
+fn build_simple_params(cfg: &EffectiveConfig, since: String, until: String) -> render::SimpleParams {
+  render::SimpleParams {
+    repo: cfg.repo.clone(),
+    since,
+    until,
+    include_merges: cfg.include_merges,
+    include_patch: cfg.include_patch,
+    max_patch_bytes: cfg.max_patch_bytes,
+    tz_local: matches!(cfg.tz, Tz::Local),
+    save_patches_dir: cfg.save_patches.clone(),
+    github_prs: cfg.github_prs,
+  }
+}
+
+fn build_full_params(cfg: &EffectiveConfig, since: String, until: String) -> render::FullParams {
+  let label = match &cfg.window {
+    WindowSpec::Month { ym } => Some(ym.clone()),
+    _ => Some("window".into()),
+  };
+  render::FullParams {
+    repo: cfg.repo.clone(),
+    label,
+    since,
+    until,
+    include_merges: cfg.include_merges,
+    include_patch: cfg.include_patch,
+    max_patch_bytes: cfg.max_patch_bytes,
+    tz_local: matches!(cfg.tz, Tz::Local),
+    split_out: cfg.split_out.clone(),
+    include_unmerged: cfg.include_unmerged,
+    save_patches: cfg.save_patches.is_some(),
+    github_prs: cfg.github_prs,
+  }
+}
+
+fn main() -> Result<()> {
+  let cli = Cli::parse();
+  run_with_cli(cli)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::path::PathBuf;
+
+  fn base_cli() -> Cli {
+    Cli {
+      repo: PathBuf::from("."),
+      month: None,
+      for_str: None,
+      since: None,
+      until: None,
+      simple: false,
+      full: false,
+      include_merges: false,
+      include_patch: false,
+      max_patch_bytes: 0,
+      save_patches: None,
+      split_out: None,
+      out: "-".into(),
+      github_prs: false,
+      include_unmerged: false,
+      tz: Tz::Utc,
     }
   }
+
+  #[test]
+  fn normalize_month_defaults_to_simple() {
+    let mut cli = base_cli();
+    cli.month = Some("2025-08".into());
+    let cfg = normalize(cli).unwrap();
+    assert!(matches!(cfg.mode, Mode::Simple));
+    // Ensure window preserved from CLI; avoid testing window logic here
+    match cfg.window {
+      WindowSpec::Month { ref ym } => assert_eq!(ym, "2025-08"),
+      _ => panic!("expected Month window"),
+    }
+  }
+
+  #[test]
+  fn normalize_conflicting_modes_errors() {
+    let mut cli = base_cli();
+    cli.month = Some("2025-08".into());
+    cli.simple = true;
+    cli.full = true;
+    assert!(normalize(cli).is_err());
+  }
+
+  // Integration tests under tests/ cover run_with_cli end-to-end
 }

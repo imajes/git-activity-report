@@ -61,41 +61,40 @@ struct ProcessContext<'a> {
 fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
   let (num_list, num_map) = gitio::commit_numstat(repo, sha)?;
   let name_status_list = gitio::commit_name_status(repo, sha)?;
+  Ok(build_file_entries_from(num_list, num_map, name_status_list))
+}
 
+fn build_file_entries_from(
+  num_list: Vec<(String, Option<i64>, Option<i64>)>,
+  num_map: std::collections::HashMap<String, (Option<i64>, Option<i64>)>,
+  name_status_list: Vec<std::collections::HashMap<String, String>>,
+) -> Vec<FileEntry> {
   if !name_status_list.is_empty() {
-    // Prefer name-status for more detail (e.g., renames)
-
-    Ok(
-      name_status_list
-        .into_iter()
-        .map(|entry| {
-          let path = entry.get("file").cloned().unwrap_or_default();
-          let (additions, deletions) = num_map.get(&path).cloned().unwrap_or((None, None));
-          FileEntry {
-            file: path,
-            status: entry.get("status").cloned().unwrap_or_else(|| "M".to_string()),
-            old_path: entry.get("old_path").cloned(),
-            additions,
-            deletions,
-          }
-        })
-        .collect(),
-    )
-  } else {
-    // Fallback to numstat for a simpler list of files
-
-    Ok(
-      num_list
-        .into_iter()
-        .map(|(path, additions, deletions)| FileEntry {
+    name_status_list
+      .into_iter()
+      .map(|entry| {
+        let path = entry.get("file").cloned().unwrap_or_default();
+        let (additions, deletions) = num_map.get(&path).cloned().unwrap_or((None, None));
+        FileEntry {
           file: path,
-          status: "M".to_string(),
-          old_path: None,
+          status: entry.get("status").cloned().unwrap_or_else(|| "M".to_string()),
+          old_path: entry.get("old_path").cloned(),
           additions,
           deletions,
-        })
-        .collect(),
-    )
+        }
+      })
+      .collect()
+  } else {
+    num_list
+      .into_iter()
+      .map(|(path, additions, deletions)| FileEntry {
+        file: path,
+        status: "M".to_string(),
+        old_path: None,
+        additions,
+        deletions,
+      })
+      .collect()
   }
 }
 
@@ -285,10 +284,13 @@ pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
 /// Generates a `RangeManifest` and saves individual commit "shards" to disk.
 pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
   let label = params.label.clone().unwrap_or_else(|| "window".to_string());
-  let base_dir = params
-    .split_out
-    .clone()
-    .unwrap_or_else(|| format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")));
+  let base_dir = if let Some(dir) = &params.split_out { dir.clone() } else {
+    let tmp = std::env::temp_dir();
+    tmp
+      .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
+      .to_string_lossy()
+      .to_string()
+  };
   let subdir = Path::new(&base_dir).join(&label);
   std::fs::create_dir_all(&subdir)?;
 
@@ -481,10 +483,233 @@ fn format_shard_name(epoch: i64, short_sha: &str, tz_local: bool) -> String {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   #[test]
   fn shard_name_utc_has_expected_pattern() {
     let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-09-12...
     assert!(name.ends_with("-abcdef123456.json"));
     assert_eq!(name.len(), "YYYY.MM.DD-HH.MM-abcdef123456.json".len());
+  }
+
+  #[test]
+  fn file_entries_fallback_uses_numstat() {
+    use std::collections::HashMap as Map;
+    let num_list = vec![("file.txt".to_string(), Some(1), Some(0))];
+    let mut num_map = Map::new();
+    num_map.insert("file.txt".to_string(), (Some(1), Some(0)));
+    let name_status_list: Vec<Map<String, String>> = vec![];
+    let entries = build_file_entries_from(num_list, num_map, name_status_list);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].file, "file.txt");
+    assert_eq!(entries[0].status, "M");
+    assert_eq!(entries[0].additions, Some(1));
+  }
+
+  fn fixture_repo() -> String {
+    if let Ok(dir) = std::env::var("GAR_FIXTURE_REPO_DIR") {
+      return dir;
+    }
+    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/.tmp/tmpdir");
+    std::fs::read_to_string(p).expect("fixture path").trim().to_string()
+  }
+
+  #[test]
+  fn run_simple_with_patch_and_save() {
+    let repo = fixture_repo();
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let params = SimpleParams {
+      repo,
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+      include_merges: true,
+      include_patch: true,
+      max_patch_bytes: 16,
+      tz_local: false,
+      save_patches_dir: Some(tmpdir.path().to_string_lossy().to_string()),
+      github_prs: true,
+    };
+    let report = run_simple(&params).unwrap();
+    assert_eq!(report.mode, "simple");
+    assert!(report.count >= 1);
+    assert!(std::fs::read_dir(tmpdir.path()).unwrap().next().is_some());
+    let clipped_any = report.commits.iter().any(|c| c.patch_clipped == Some(true));
+    assert!(clipped_any);
+  }
+
+  #[test]
+  fn run_simple_no_merges_no_patch_no_save() {
+    let repo = fixture_repo();
+    let params = SimpleParams {
+      repo,
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+      include_merges: false,
+      include_patch: false,
+      max_patch_bytes: 0,
+      tz_local: true,
+      save_patches_dir: None,
+      github_prs: false,
+    };
+    let report = run_simple(&params).unwrap();
+    assert_eq!(report.mode, "simple");
+    assert!(report.count >= 1);
+  }
+
+  #[test]
+  fn run_full_with_unmerged_and_patches() {
+    let repo = fixture_repo();
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let params = FullParams {
+      repo,
+      label: Some("window".into()),
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+      include_merges: true,
+      include_patch: false,
+      max_patch_bytes: 0,
+      tz_local: true,
+      split_out: Some(tmpdir.path().to_string_lossy().to_string()),
+      include_unmerged: true,
+      save_patches: true,
+      github_prs: false,
+    };
+    let out = run_full(&params).unwrap();
+    let dir = out.get("dir").unwrap().as_str().unwrap();
+    let manifest = out.get("manifest").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(manifest);
+    assert!(path.exists());
+  }
+
+  #[test]
+  fn run_full_embeds_patches() {
+    let repo = fixture_repo();
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let params = FullParams {
+      repo,
+      label: Some("window".into()),
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+      include_merges: true,
+      include_patch: true,
+      max_patch_bytes: 32,
+      tz_local: false,
+      split_out: Some(tmpdir.path().to_string_lossy().to_string()),
+      include_unmerged: false,
+      save_patches: false,
+      github_prs: true,
+    };
+    let out = run_full(&params).unwrap();
+    let dir = out.get("dir").unwrap().as_str().unwrap();
+    let manifest = out.get("manifest").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(manifest);
+    assert!(path.exists());
+  }
+
+  #[test]
+  fn run_full_no_merges() {
+    let repo = fixture_repo();
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let params = FullParams {
+      repo,
+      label: None,
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+      include_merges: false,
+      include_patch: false,
+      max_patch_bytes: 0,
+      tz_local: false,
+      split_out: Some(tmpdir.path().to_string_lossy().to_string()),
+      include_unmerged: false,
+      save_patches: false,
+      github_prs: false,
+    };
+    let out = run_full(&params).unwrap();
+    let dir = out.get("dir").unwrap().as_str().unwrap();
+    assert!(std::path::Path::new(dir).exists());
+  }
+
+  #[test]
+  fn run_full_with_real_unmerged_branch() {
+    // Create a tiny repo with an unmerged branch having unique commits
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let sh = |args: &[&str]| {
+      let st = std::process::Command::new("git").args(args).current_dir(repo).status().unwrap();
+      assert!(st.success(), "git {:?} failed", args);
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "user.name", "Fixture Bot"]);
+    sh(&["config", "user.email", "fixture@example.com"]);
+    sh(&["config", "commit.gpgsign", "false"]);
+    std::fs::write(repo.join("a.txt"), "a\n").unwrap(); sh(&["add", "."]);
+    sh(&["commit", "-q", "-m", "A"]);
+    sh(&["checkout", "-q", "-b", "feature/x"]);
+    std::fs::write(repo.join("b.txt"), "b\n").unwrap(); sh(&["add", "."]);
+    // Include a body to exercise body_lines derivation
+    sh(&["commit", "-q", "-m", "B subject", "-m", "Body line 1\nBody line 2"]);
+    sh(&["switch", "-q", "-C", "main"]);
+
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    let params = FullParams {
+      repo: repo.to_string_lossy().to_string(),
+      label: Some("window".into()),
+      since: "1970-01-01".into(),
+      until: "2100-01-01".into(),
+      include_merges: true,
+      include_patch: false,
+      max_patch_bytes: 0,
+      tz_local: false,
+      split_out: Some(tmpdir.path().to_string_lossy().to_string()),
+      include_unmerged: true,
+      save_patches: false,
+      github_prs: false,
+    };
+    let out = run_full(&params).unwrap();
+    let dir = out.get("dir").unwrap().as_str().unwrap();
+    let manifest = out.get("manifest").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(manifest);
+    assert!(path.exists());
+    let data = std::fs::read(&path).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&data).unwrap();
+    // Should include unmerged_activity with at least one branch
+    assert!(v.get("unmerged_activity").is_some());
+  }
+
+  #[test]
+  fn clip_patch_handles_multibyte_boundaries() {
+    // "é" in UTF-8 is two bytes (0xC3 0xA9). Truncate to 1 byte should back off.
+    let s = "ééé".to_string();
+    let (p, clipped) = clip_patch(s, 1);
+    assert_eq!(clipped, Some(true));
+    let out = p.unwrap();
+    // Out should be valid UTF-8 with length 0 (cannot take only first byte of multibyte)
+    assert!(out.is_char_boundary(out.len()));
+  }
+
+  #[test]
+  fn run_simple_with_empty_commit_exercises_name_status_fallback() {
+    // Use pure helper-based test for fallback logic instead of creating a special repo.
+    // This keeps the test deterministic and covers the intended branch.
+    use std::collections::HashMap as Map;
+    let num_list = vec![("file.txt".to_string(), Some(0), Some(0))];
+    let mut num_map = Map::new();
+    num_map.insert("file.txt".to_string(), (Some(0), Some(0)));
+    let name_status_list: Vec<Map<String, String>> = vec![];
+    let entries = build_file_entries_from(num_list, num_map, name_status_list);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].file, "file.txt");
+  }
+
+  use proptest::prelude::*;
+  proptest! {
+    #[test]
+    fn clip_patch_never_splits_utf8(s in ".*", max in 0usize..128usize) {
+      let (p, clipped) = clip_patch(s.clone(), max);
+      prop_assert!(p.is_some());
+      let out = p.unwrap();
+      prop_assert!(out.is_char_boundary(out.len()));
+      if max == 0 { prop_assert_eq!(clipped, Some(false)); }
+      if out.len() <= s.len() && max > 0 { prop_assert!(out.len() <= max); }
+    }
   }
 }

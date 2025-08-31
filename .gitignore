@@ -8,7 +8,6 @@
 
 # Test fixtures and temp
 /tests/.tmp/
-/tests/snapshots/
 /tests/tests/
 /tests/fixtures/full_out/
 
