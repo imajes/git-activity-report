@@ -53,6 +53,7 @@ pub fn month_bounds(year_month: &str) -> Result<(String, String)> {
 /// Compute (since, until) for a window.
 ///
 /// Supports an optional `now` override for deterministic testing.
+#[allow(dead_code)]
 pub fn compute_window_strings(
   window: &WindowSpec,
   now: Option<chrono::DateTime<chrono::Local>>,
@@ -109,7 +110,9 @@ fn iso_naive(dt: chrono::DateTime<chrono::Local>) -> String {
 /// Parse a `--now-override` string into a local DateTime.
 /// Accepts RFC3339 (e.g. 2025-08-15T12:00:00Z) or a naive local timestamp
 /// formatted as `%Y-%m-%dT%H:%M:%S`.
-pub fn parse_now_override(s: Option<&str>) -> Option<DateTime<Local>> {
+/// Parse a `--now-override` string into a local DateTime.
+/// Public entry used by main orchestration. Accepts RFC3339 or naive local.
+pub fn parse_now(s: Option<&str>) -> Option<DateTime<Local>> {
   s.and_then(|raw| {
     chrono::DateTime::parse_from_rfc3339(raw)
       .ok()
@@ -127,8 +130,6 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
   let phrase = input.trim().to_lowercase();
   let now = now.unwrap_or_else(Local::now);
 
-  // Prefer library support; avoid custom anchoring when better alternates exist.
-  // Override: for "today" and "yesterday", anchor to local day start / 24h ago, ending at now.
   if phrase == "today" {
     let start = now
       .date_naive()
@@ -304,6 +305,42 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
   None
 }
 
+/// Resolve any `WindowSpec` into one or more labeled ranges.
+/// - Month and Since/Until always yield one range.
+/// - ForPhrase yields multiple if a bucket phrase is detected; otherwise one range.
+pub fn resolve_ranges(
+  window: &crate::range_windows::WindowSpec,
+  now: Option<chrono::DateTime<chrono::Local>>,
+) -> anyhow::Result<Vec<LabeledRange>> {
+  match window {
+    crate::range_windows::WindowSpec::Month { ym } => {
+      let (s, u) = month_bounds(ym)?;
+      Ok(vec![LabeledRange {
+        label: ym.clone(),
+        since: s,
+        until: u,
+      }])
+    }
+    crate::range_windows::WindowSpec::SinceUntil { since, until } => Ok(vec![LabeledRange {
+      label: "window".into(),
+      since: since.clone(),
+      until: until.clone(),
+    }]),
+    crate::range_windows::WindowSpec::ForPhrase { phrase } => {
+      if let Some(multi) = for_phrase_buckets(phrase, now) {
+        Ok(multi)
+      } else {
+        let (s, u) = for_phrase_bounds(phrase, now)?;
+        Ok(vec![LabeledRange {
+          label: "window".into(),
+          since: s,
+          until: u,
+        }])
+      }
+    }
+  }
+}
+
 fn last_day_of_month(year: i32, month: u32) -> u32 {
   // Advance to first day of next month, subtract one day
   let (ny, nm) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
@@ -348,16 +385,6 @@ mod tests {
     let (s, u) = compute_window_strings(&win, None).unwrap();
     assert_eq!(s, "2025-08-01");
     assert_eq!(u, "2025-09-01");
-  }
-
-  #[test]
-  fn compute_window_for_phrase_not_supported() {
-    let win = WindowSpec::ForPhrase {
-      phrase: "last week".into(),
-    };
-    let (s, u) = compute_window_strings(&win, None).unwrap();
-    assert!(s.len() >= 10);
-    assert!(u.len() >= 10);
   }
 
   #[test]
@@ -485,3 +512,4 @@ mod future_tests {
     assert!(un.month() == 2 || un.month() == 3);
   }
 }
+

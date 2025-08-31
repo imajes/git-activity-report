@@ -78,7 +78,6 @@ fn many_for_phrases_should_match_expected_ranges() {
     let out = Command::cargo_bin("git-activity-report")
       .unwrap()
       .args([
-        "--simple",
         "--for",
         p,
         "--repo",

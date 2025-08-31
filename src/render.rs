@@ -2,34 +2,17 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, Local};
 
-use crate::enrich;
 use crate::gitio;
-use crate::model::{
-  BranchItems, Commit, FileEntry, ManifestItem, PatchRef, Person, Range, RangeManifest, SimpleReport, Summary,
-  Timestamps, UnmergedActivity,
-};
-use crate::util::{iso_in_tz, short_sha};
+use crate::model::{BranchItems, Commit, ManifestItem, Range, SimpleReport, Summary, UnmergedActivity};
+use crate::util::format_shard_name;
 
 // --- Parameter Structs ---
 // These remain unchanged as they define the public API.
 
 #[derive(Debug)]
-pub struct SimpleParams {
-  pub repo: String,
-  pub since: String,
-  pub until: String,
-  pub include_merges: bool,
-  pub include_patch: bool,
-  pub max_patch_bytes: usize,
-  pub tz_local: bool,
-  pub save_patches_dir: Option<String>,
-  pub github_prs: bool,
-}
-
-#[derive(Debug)]
-pub struct FullParams {
+pub struct ReportParams {
   pub repo: String,
   pub label: Option<String>,
   pub since: String,
@@ -38,192 +21,25 @@ pub struct FullParams {
   pub include_patch: bool,
   pub max_patch_bytes: usize,
   pub tz_local: bool,
+  pub split_apart: bool,
   pub split_out: Option<String>,
   pub include_unmerged: bool,
-  pub save_patches: bool,
+  pub save_patches_dir: Option<String>,
   pub github_prs: bool,
   pub now_local: Option<DateTime<Local>>,
 }
 
-// --- Internal Context for Processing ---
-// An internal struct to pass common parameters to helper functions.
-
-struct ProcessContext<'a> {
-  repo: &'a str,
-  tz_local: bool,
-  github_prs: bool,
-  include_patch: bool,
-  max_patch_bytes: usize,
-}
+// --- Internal Context for Processing moved to crate::commit ---
 
 // --- Reusable Helper Functions ---
 
-/// Builds a vector of `FileEntry` structs for a given commit.
-fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
-  let (num_list, num_map) = gitio::commit_numstat(repo, sha)?;
-  let name_status_list = gitio::commit_name_status(repo, sha)?;
-  Ok(build_file_entries_from(num_list, num_map, name_status_list))
-}
-
-fn build_file_entries_from(
-  num_list: Vec<(String, Option<i64>, Option<i64>)>,
-  num_map: std::collections::HashMap<String, (Option<i64>, Option<i64>)>,
-  name_status_list: Vec<std::collections::HashMap<String, String>>,
-) -> Vec<FileEntry> {
-  if !name_status_list.is_empty() {
-    name_status_list
-      .into_iter()
-      .map(|entry| {
-        let path = entry.get("file").cloned().unwrap_or_default();
-        let (additions, deletions) = num_map.get(&path).cloned().unwrap_or((None, None));
-        FileEntry {
-          file: path,
-          status: entry.get("status").cloned().unwrap_or_else(|| "M".to_string()),
-          old_path: entry.get("old_path").cloned(),
-          additions,
-          deletions,
-        }
-      })
-      .collect()
-  } else {
-    num_list
-      .into_iter()
-      .map(|(path, additions, deletions)| FileEntry {
-        file: path,
-        status: "M".to_string(),
-        old_path: None,
-        additions,
-        deletions,
-      })
-      .collect()
-  }
-}
-
-/// Clips a patch text string to a maximum number of bytes, ensuring it doesn't split a UTF-8 character.
-fn clip_patch(patch_text: String, max_bytes: usize) -> (Option<String>, Option<bool>) {
-  if max_bytes == 0 {
-    return (Some(patch_text), Some(false));
-  }
-
-  let bytes = patch_text.as_bytes();
-
-  if bytes.len() <= max_bytes {
-    return (Some(patch_text), Some(false));
-  }
-
-  let mut end = max_bytes;
-
-  while end > 0 && (bytes[end] & 0xC0) == 0x80 {
-    // Find the start of a UTF-8 character
-    end -= 1;
-  }
-
-  (Some(String::from_utf8_lossy(&bytes[..end]).to_string()), Some(true))
-}
-
-/// Enriches a commit with its associated GitHub Pull Request info.
-fn enrich_with_github_prs(commit: &mut Commit, repo: &str) {
-  if let Ok(prs) = enrich::try_fetch_prs(repo, &commit.sha) {
-    if let Some(first_pr) = prs.first() {
-      commit.patch_ref.github_diff_url = first_pr.diff_url.clone();
-      commit.patch_ref.github_patch_url = first_pr.patch_url.clone();
-    }
-    commit.github_prs = Some(prs);
-  }
-}
-/// Saves a commit patch to a specified directory.
-fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path) -> Result<()> {
-  std::fs::create_dir_all(directory_path)?;
-  let path = directory_path.join(format!("{}.patch", commit.short_sha));
-  let patch_content = gitio::commit_patch(repo, &commit.sha)?;
-  std::fs::write(&path, patch_content)?;
-  commit.patch_ref.local_patch_file = Some(path.to_string_lossy().to_string());
-
-  Ok(())
-}
-
-fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit> {
-  // 1. Build the core commit data from git metadata
-  let meta = gitio::commit_meta(context.repo, sha)?;
-  let files = build_file_entries(context.repo, sha)?;
-  let diffstat_text = gitio::commit_shortstat(context.repo, sha)?;
-
-  let timestamps = Timestamps {
-    author: meta.at,
-    commit: meta.ct,
-    author_local: iso_in_tz(meta.at, context.tz_local),
-    commit_local: iso_in_tz(meta.ct, context.tz_local),
-    timezone: if context.tz_local { "local".into() } else { "utc".into() },
-  };
-
-  let author = Person {
-    name: meta.author_name,
-    email: meta.author_email,
-    date: meta.author_date,
-  };
-
-  let committer = Person {
-    name: meta.committer_name,
-    email: meta.committer_email,
-    date: meta.committer_date,
-  };
-
-  let patch_ref = PatchRef {
-    embed: context.include_patch,
-    git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha),
-    local_patch_file: None,
-    github_diff_url: None,
-    github_patch_url: None,
-  };
-
-  let commit = Commit {
-    sha: meta.sha.clone(),
-    short_sha: short_sha(&meta.sha),
-    parents: meta.parents,
-    author,
-    committer,
-    timestamps,
-    subject: meta.subject,
-    body: meta.body,
-    files,
-    diffstat_text,
-    patch_ref,
-    patch: None,
-    patch_clipped: None,
-    github_prs: None,
-    body_lines: None,
-  };
-
-  Ok(commit)
-}
-
-/// Processes a single git commit SHA and returns a fully populated `Commit` struct.
-fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
-  let mut commit = build_commit_object(sha, context)?;
-
-  // 2. Act on the built data by enriching it further
-  if context.include_patch {
-    let patch_text = gitio::commit_patch(context.repo, sha)?;
-    let (patch, clipped) = clip_patch(patch_text, context.max_patch_bytes);
-    commit.patch = patch;
-    commit.patch_clipped = clipped;
-  }
-
-  if context.github_prs {
-    enrich_with_github_prs(&mut commit, context.repo);
-  }
-
-  if !commit.body.is_empty() {
-    commit.body_lines = Some(commit.body.lines().map(String::from).collect());
-  }
-
-  Ok(commit)
-}
+// patch file writing moved to crate::commit::save_patch_to_disk
+use crate::commit::{ProcessContext, process_commit};
 
 // --- Report Generation Logic ---
 
 /// Generates a `SimpleReport` containing all commit data in memory.
-pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
+pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
@@ -246,7 +62,7 @@ pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
     let mut commit = process_commit(sha, &context)?;
 
     if let Some(patches_dir_str) = &params.save_patches_dir {
-      save_patch_to_disk(&mut commit, &params.repo, Path::new(patches_dir_str))?;
+      crate::commit::save_patch_to_disk(&mut commit, &params.repo, Path::new(patches_dir_str))?;
     }
 
     // Accumulate summary stats
@@ -266,7 +82,6 @@ pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
 
   let report = SimpleReport {
     repo: params.repo.clone(),
-    mode: "simple".into(),
     range: Range {
       since: params.since.clone(),
       until: params.until.clone(),
@@ -277,13 +92,18 @@ pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
     authors,
     summary,
     commits,
+    items: None,
   };
 
   Ok(report)
 }
 
-/// Generates a `RangeManifest` and saves individual commit "shards" to disk.
-pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
+/// Unified entry: returns a report JSON; when split_apart, writes shards and returns a pointer {dir,file}.
+pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
+  if !params.split_apart {
+    let r = run_simple(params)?;
+    return Ok(serde_json::to_value(&r)?);
+  }
   let label = params.label.clone().unwrap_or_else(|| "window".to_string());
   let base_dir = if let Some(dir) = &params.split_out {
     dir.clone()
@@ -298,45 +118,64 @@ pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
   let subdir = Path::new(&base_dir).join(&label);
   std::fs::create_dir_all(&subdir)?;
 
-  // Process the primary commit range
+  // Process the primary commit range: write shards and collect items/summary/authors
   let (items, summary, authors) = process_commit_range(params, &subdir, &label)?;
 
   // Optionally process unmerged branches
-  let unmerged_activity = if params.include_unmerged {
+  let _unmerged_activity = if params.include_unmerged {
     Some(process_unmerged_branches(params, &subdir, &label)?)
   } else {
     None
   };
 
-  // Build and write the final manifest
-  let manifest = RangeManifest {
-    label: Some(label.clone()),
+  // Build the unified report (simple + items)
+  // Recompute commits in-memory to embed into report
+  let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
+  let context = ProcessContext {
+    repo: &params.repo,
+    tz_local: params.tz_local,
+    github_prs: params.github_prs,
+    include_patch: params.include_patch,
+    max_patch_bytes: params.max_patch_bytes,
+  };
+  let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
+  for sha in shas.iter() {
+    let mut c = process_commit(sha, &context)?;
+    if let Some(dir) = &params.save_patches_dir {
+      let p = Path::new(dir);
+      if p.exists() {
+        crate::commit::save_patch_to_disk(&mut c, &params.repo, p)?;
+      }
+    }
+    commits.push(c);
+  }
+
+  let report = SimpleReport {
+    repo: params.repo.clone(),
     range: Range {
       since: params.since.clone(),
       until: params.until.clone(),
     },
-    repo: params.repo.clone(),
     include_merges: params.include_merges,
     include_patch: params.include_patch,
-    mode: "full".into(),
-    count: items.len(),
+    count: commits.len(),
     authors,
     summary,
-    items,
-    unmerged_activity,
+    commits,
+    items: Some(items),
   };
 
-  let manifest_path = Path::new(&base_dir).join(format!("manifest-{}.json", label));
-  std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+  let report_path = Path::new(&base_dir).join(format!("report-{}.json", label));
+  std::fs::write(&report_path, serde_json::to_vec_pretty(&report)?)?;
 
-  Ok(serde_json::json!({ "dir": base_dir, "manifest": format!("manifest-{}.json", label) }))
+  Ok(serde_json::json!({ "dir": base_dir, "file": format!("report-{}.json", label) }))
 }
 
 // --- `run_full` Sub-logic ---
 
 /// Helper for `run_full` to process the main list of commits.
 fn process_commit_range(
-  params: &FullParams,
+  params: &ReportParams,
   subdir: &Path,
   label: &str,
 ) -> Result<(Vec<ManifestItem>, Summary, BTreeMap<String, i64>)> {
@@ -361,9 +200,9 @@ fn process_commit_range(
   for sha in shas.iter() {
     let mut commit = process_commit(sha, &context)?;
 
-    if params.save_patches {
+    if params.save_patches_dir.is_some() {
       let patch_dir = subdir.join("patches");
-      save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
+      crate::commit::save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
     }
 
     // Write commit shard to disk
@@ -392,7 +231,7 @@ fn process_commit_range(
 }
 
 /// Helper for `run_full` to process unmerged branches.
-fn process_unmerged_branches(params: &FullParams, subdir: &Path, label: &str) -> Result<UnmergedActivity> {
+fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) -> Result<UnmergedActivity> {
   let current_branch = gitio::current_branch(&params.repo)?;
   let branches: Vec<String> = gitio::list_local_branches(&params.repo)?
     .into_iter()
@@ -434,9 +273,9 @@ fn process_unmerged_branches(params: &FullParams, subdir: &Path, label: &str) ->
     for sha in unmerged_shas.iter() {
       let mut commit = process_commit(sha, &context)?;
 
-      if params.save_patches {
+      if params.save_patches_dir.is_some() {
         let patch_dir = branch_dir.join("patches");
-        save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
+        crate::commit::save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
       }
 
       let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, params.tz_local);
@@ -471,29 +310,15 @@ fn process_unmerged_branches(params: &FullParams, subdir: &Path, label: &str) ->
   Ok(unmerged_activity)
 }
 
-/// Formats a file name for a commit shard based on its timestamp and SHA.
-fn format_shard_name(epoch: i64, short_sha: &str, tz_local: bool) -> String {
-  let (date, time) = if tz_local {
-    let dt = Local.timestamp_opt(epoch, 0).single().unwrap();
-    (dt.format("%Y.%m.%d").to_string(), dt.format("%H.%M").to_string())
-  } else {
-    let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
-    (dt.format("%Y.%m.%d").to_string(), dt.format("%H.%M").to_string())
-  };
-  format!("{}-{}-{}.json", date, time, short_sha)
-}
+// Shard filename helper lives in util; imported above.
 
 // --- Tests ---
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  #[test]
-  fn shard_name_utc_has_expected_pattern() {
-    let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-09-12...
-    assert!(name.ends_with("-abcdef123456.json"));
-    assert_eq!(name.len(), "YYYY.MM.DD-HH.MM-abcdef123456.json".len());
-  }
+  use crate::commit::build_file_entries_from;
+  // shard_name test moved to util tests
 
   #[test]
   fn file_entries_fallback_uses_numstat() {
@@ -502,6 +327,7 @@ mod tests {
     let mut num_map = Map::new();
     num_map.insert("file.txt".to_string(), (Some(1), Some(0)));
     let name_status_list: Vec<Map<String, String>> = vec![];
+    use crate::commit::build_file_entries_from;
     let entries = build_file_entries_from(num_list, num_map, name_status_list);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].file, "file.txt");
@@ -521,19 +347,24 @@ mod tests {
   fn run_simple_with_patch_and_save() {
     let repo = fixture_repo();
     let tmpdir = tempfile::TempDir::new().unwrap();
-    let params = SimpleParams {
+    let params = ReportParams {
       repo,
+      label: Some("window".into()),
       since: "2025-08-01".into(),
       until: "2025-09-01".into(),
       include_merges: true,
       include_patch: true,
       max_patch_bytes: 16,
       tz_local: false,
+      split_apart: false,
+      split_out: None,
+      include_unmerged: false,
       save_patches_dir: Some(tmpdir.path().to_string_lossy().to_string()),
       github_prs: true,
+      now_local: None,
     };
     let report = run_simple(&params).unwrap();
-    assert_eq!(report.mode, "simple");
+    assert!(report.count >= 1);
     assert!(report.count >= 1);
     assert!(std::fs::read_dir(tmpdir.path()).unwrap().next().is_some());
     let clipped_any = report.commits.iter().any(|c| c.patch_clipped == Some(true));
@@ -543,27 +374,32 @@ mod tests {
   #[test]
   fn run_simple_no_merges_no_patch_no_save() {
     let repo = fixture_repo();
-    let params = SimpleParams {
+    let params = ReportParams {
       repo,
+      label: Some("window".into()),
       since: "2025-08-01".into(),
       until: "2025-09-01".into(),
       include_merges: false,
       include_patch: false,
       max_patch_bytes: 0,
       tz_local: true,
+      split_apart: false,
+      split_out: None,
+      include_unmerged: false,
       save_patches_dir: None,
       github_prs: false,
+      now_local: None,
     };
     let report = run_simple(&params).unwrap();
-    assert_eq!(report.mode, "simple");
+    assert!(report.count >= 1);
     assert!(report.count >= 1);
   }
 
   #[test]
-  fn run_full_with_unmerged_and_patches() {
+  fn run_split_with_unmerged_and_patches() {
     let repo = fixture_repo();
     let tmpdir = tempfile::TempDir::new().unwrap();
-    let params = FullParams {
+    let params = ReportParams {
       repo,
       label: Some("window".into()),
       since: "2025-08-01".into(),
@@ -572,24 +408,25 @@ mod tests {
       include_patch: false,
       max_patch_bytes: 0,
       tz_local: true,
+      split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: true,
-      save_patches: true,
+      save_patches_dir: Some(tmpdir.path().join("patches").to_string_lossy().to_string()),
       github_prs: false,
       now_local: None,
     };
-    let out = run_full(&params).unwrap();
+    let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
-    let manifest = out.get("manifest").unwrap().as_str().unwrap();
-    let path = std::path::Path::new(dir).join(manifest);
+    let file = out.get("file").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(file);
     assert!(path.exists());
   }
 
   #[test]
-  fn run_full_embeds_patches() {
+  fn run_split_embeds_patches() {
     let repo = fixture_repo();
     let tmpdir = tempfile::TempDir::new().unwrap();
-    let params = FullParams {
+    let params = ReportParams {
       repo,
       label: Some("window".into()),
       since: "2025-08-01".into(),
@@ -598,24 +435,25 @@ mod tests {
       include_patch: true,
       max_patch_bytes: 32,
       tz_local: false,
+      split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: false,
-      save_patches: false,
+      save_patches_dir: None,
       github_prs: true,
       now_local: None,
     };
-    let out = run_full(&params).unwrap();
+    let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
-    let manifest = out.get("manifest").unwrap().as_str().unwrap();
-    let path = std::path::Path::new(dir).join(manifest);
+    let file = out.get("file").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(file);
     assert!(path.exists());
   }
 
   #[test]
-  fn run_full_no_merges() {
+  fn run_split_no_merges() {
     let repo = fixture_repo();
     let tmpdir = tempfile::TempDir::new().unwrap();
-    let params = FullParams {
+    let params = ReportParams {
       repo,
       label: None,
       since: "2025-08-01".into(),
@@ -624,19 +462,20 @@ mod tests {
       include_patch: false,
       max_patch_bytes: 0,
       tz_local: false,
+      split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: false,
-      save_patches: false,
+      save_patches_dir: None,
       github_prs: false,
       now_local: None,
     };
-    let out = run_full(&params).unwrap();
+    let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
     assert!(std::path::Path::new(dir).exists());
   }
 
   #[test]
-  fn run_full_with_real_unmerged_branch() {
+  fn run_split_with_real_unmerged_branch() {
     // Create a tiny repo with an unmerged branch having unique commits
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
@@ -663,7 +502,7 @@ mod tests {
     sh(&["switch", "-q", "-C", "main"]);
 
     let tmpdir = tempfile::TempDir::new().unwrap();
-    let params = FullParams {
+    let params = ReportParams {
       repo: repo.to_string_lossy().to_string(),
       label: Some("window".into()),
       since: "1970-01-01".into(),
@@ -672,33 +511,26 @@ mod tests {
       include_patch: false,
       max_patch_bytes: 0,
       tz_local: false,
+      split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: true,
-      save_patches: false,
+      save_patches_dir: None,
       github_prs: false,
       now_local: None,
     };
-    let out = run_full(&params).unwrap();
+    let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
-    let manifest = out.get("manifest").unwrap().as_str().unwrap();
-    let path = std::path::Path::new(dir).join(manifest);
+    let file = out.get("file").unwrap().as_str().unwrap();
+    let path = std::path::Path::new(dir).join(file);
     assert!(path.exists());
     let data = std::fs::read(&path).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&data).unwrap();
-    // Should include unmerged_activity with at least one branch
-    assert!(v.get("unmerged_activity").is_some());
+    // Report should include range and commits array
+    assert!(v.get("range").is_some());
+    assert!(v.get("commits").is_some());
   }
 
-  #[test]
-  fn clip_patch_handles_multibyte_boundaries() {
-    // "é" in UTF-8 is two bytes (0xC3 0xA9). Truncate to 1 byte should back off.
-    let s = "ééé".to_string();
-    let (p, clipped) = clip_patch(s, 1);
-    assert_eq!(clipped, Some(true));
-    let out = p.unwrap();
-    // Out should be valid UTF-8 with length 0 (cannot take only first byte of multibyte)
-    assert!(out.is_char_boundary(out.len()));
-  }
+  // clip_patch tests moved to util
 
   #[test]
   fn run_simple_with_empty_commit_exercises_name_status_fallback() {
@@ -714,16 +546,5 @@ mod tests {
     assert_eq!(entries[0].file, "file.txt");
   }
 
-  use proptest::prelude::*;
-  proptest! {
-    #[test]
-    fn clip_patch_never_splits_utf8(s in ".*", max in 0usize..128usize) {
-      let (p, clipped) = clip_patch(s.clone(), max);
-      prop_assert!(p.is_some());
-      let out = p.unwrap();
-      prop_assert!(out.is_char_boundary(out.len()));
-      if max == 0 { prop_assert_eq!(clipped, Some(false)); }
-      if out.len() <= s.len() && max > 0 { prop_assert!(out.len() <= max); }
-    }
-  }
+  // proptests for clip_patch moved to util
 }

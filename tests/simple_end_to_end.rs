@@ -7,22 +7,14 @@ fn simple_mode_outputs_expected_shape() {
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
 
-  cmd.args([
-    "--simple",
-    "--since",
-    "2025-08-01",
-    "--until",
-    "2025-09-01",
-    "--repo",
-    repo_path,
-  ]);
+  cmd.args(["--since", "2025-08-01", "--until", "2025-09-01", "--repo", repo_path]);
 
   let out = cmd.output().unwrap();
 
   assert!(out.status.success());
 
   let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-  assert_eq!(v["mode"], "simple");
+  assert!(v["commits"].is_array());
 
   let since = v["range"]["since"].as_str().unwrap();
   let until = v["range"]["until"].as_str().unwrap();
@@ -49,7 +41,6 @@ fn simple_mode_writes_to_file_and_validates_shape() {
 
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
-    "--simple",
     "--since",
     "2025-08-01",
     "--until",
@@ -70,7 +61,6 @@ fn simple_mode_writes_to_file_and_validates_shape() {
   let v: serde_json::Value = serde_json::from_slice(&data).unwrap();
 
   // Top-level shape
-  assert_eq!(v["mode"], "simple");
   assert!(v["repo"].as_str().is_some());
   assert!(v["include_merges"].as_bool().is_some());
   assert!(v["include_patch"].as_bool().is_some());

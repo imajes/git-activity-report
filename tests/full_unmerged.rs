@@ -9,7 +9,7 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   let out_path = outdir.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
-    "--full",
+    "--split-apart",
     "--since",
     "2025-08-01",
     "--until",
@@ -25,15 +25,13 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   assert!(output.status.success());
   let top: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
   let dir = top["dir"].as_str().unwrap();
-  let manifest_file = top["manifest"].as_str().unwrap();
-  assert!(manifest_file.starts_with("manifest-"));
-  let manifest_path = std::path::Path::new(dir).join(manifest_file);
-  assert!(manifest_path.exists(), "manifest should exist");
-  let mf: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+  let file = top["file"].as_str().unwrap();
+  let report_path = std::path::Path::new(dir).join(file);
+  assert!(report_path.exists(), "report should exist");
+  let mf: serde_json::Value = serde_json::from_slice(&std::fs::read(&report_path).unwrap()).unwrap();
 
   // Top-level manifest shape
-  assert_eq!(mf["mode"], "full");
-  assert_eq!(mf["label"].as_str().unwrap(), "window");
+  assert!(mf["range"].is_object());
   let range = &mf["range"];
   assert!(range["since"].as_str().unwrap().starts_with("2025-08-01"));
   assert!(range["until"].as_str().unwrap().starts_with("2025-09-01"));
@@ -68,11 +66,7 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
 
   // Validate one shard file contains a full commit object shape
   let shard_rel = items[0]["file"].as_str().unwrap();
-  let label = mf["label"].as_str().unwrap();
-  let shard_path1 = std::path::Path::new(dir).join(label).join(shard_rel);
-  let shard_path2 = std::path::Path::new(dir).join(shard_rel);
-  assert!(shard_path1.exists() || shard_path2.exists());
-  let shard_path = if shard_path1.exists() { shard_path1 } else { shard_path2 };
+  let shard_path = std::path::Path::new(dir).join(shard_rel);
   let c: serde_json::Value = serde_json::from_slice(&std::fs::read(&shard_path).unwrap()).unwrap();
   assert!(c["sha"].as_str().is_some());
   assert!(c["timestamps"]["timezone"].as_str().is_some());
@@ -90,12 +84,17 @@ fn full_mode_month_label_and_manifest_filename() {
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.args(["--full", "--month", "2025-08", "--repo", repo_path, "--out", out_path]);
+  cmd.args([
+    "--split-apart",
+    "--month",
+    "2025-08",
+    "--repo",
+    repo_path,
+    "--out",
+    out_path,
+  ]);
   let output = cmd.output().unwrap();
   assert!(output.status.success());
   let top: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-  assert_eq!(top["manifest"].as_str().unwrap(), "manifest-2025-08.json");
-  let manifest_path = std::path::Path::new(top["dir"].as_str().unwrap()).join("manifest-2025-08.json");
-  let mf: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-  assert_eq!(mf["label"].as_str().unwrap(), "2025-08");
+  assert_eq!(top["file"].as_str().unwrap(), "report-2025-08.json");
 }

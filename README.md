@@ -1,20 +1,20 @@
 # git-activity-report
 
-Export Git activity into structured JSON—either a single file (simple mode) or a sharded dataset with a manifest (full mode). Optimized for feeding LLM agents to produce client‑friendly work reports.
+Export Git activity into structured JSON — either a single report or a split‑apart dataset with per‑commit shards and an overall manifest. Optimized for feeding LLM agents and humans.
 
 ## Features
 
 - **Natural language time windows**: `--for "last week"`, `--for "every month for the last 6 months"`, or `--month YYYY-MM`, or explicit `--since/--until` (Git approxidate supported).
 - **Local‑time timestamps** by default: each commit carries epoch seconds and local ISO strings with offsets.
-- **Two modes**:
+- **Two output styles**:
 
-  - **Simple**: one JSON payload with `commits[]`.
-  - **Full**: per‑commit shards under a labeled directory and a range manifest; a top manifest indexes multiple ranges.
+  - Single report (default): one JSON file with `commits[]`.
+  - Split‑apart (`--split-apart`): per‑commit shard files plus a per‑range report (`report-<label>.json` with `items[]`), and an overall `manifest.json` for multi‑range runs.
 
 - **Optional GitHub PR enrichment**: attaches PR metadata and `.diff`/`.patch` links when available (quietly skipped if unauthenticated).
 - **Optional unmerged branch scan**: include commits in the window that are **not** reachable from `HEAD` (in‑flight work), grouped by local branch.
 - **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
-- **Zero non‑stdlib deps**: requires Python 3 and Git on PATH.
+Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
 
 ## Install / Run
 
@@ -52,16 +52,16 @@ Export Git activity into structured JSON—either a single file (simple mode) or
 
 ## Quick start
 
-Simple, last week, include unmerged branches:
+Single report for last week, include unmerged branches:
 
 ```bash
-git activity-report --simple --for "last week" --include-unmerged --repo . > last_week.json
+git activity-report --for "last week" --include-unmerged --repo . > last_week.json
 ```
 
-Full, last month, sharded, with PR enrichment and patches saved:
+Split‑apart last month with PR enrichment and patches saved:
 
 ```bash
-git activity-report --full --for "last month" \
+git activity-report --split-apart --for "last month" \
   --out out/last-month \
   --github-prs \
   --save-patches out/last-month/patches
@@ -73,9 +73,11 @@ git activity-report --full --for "last month" \
 
   - `--month YYYY-MM`
   - `--for "last week" | "last month" | "every month for the last N months" | "every week for the last N weeks"`
-  - `--since <approxidate>` and `--until <approxidate>`
+  - `--since <approxidate>` and `--until <approxidate>` (aliases: `--start` / `--end`)
 
-- Mode: `--simple` **or** `--full`
+- Output:
+  - `--split-apart` to write shards + per‑range report(s) and, for multi‑range, an overall manifest.
+  - Without `--split-apart`, a single report is produced (one per run). For multi‑range runs, reports are written under `--out` and an overall manifest is still generated.
 - Content:
 
   - `--include-merges` (off by default)
@@ -83,7 +85,7 @@ git activity-report --full --for "last month" \
 
 - Output paths:
 
-  - `--out`: in simple mode, a file path (default stdout "-"); in full mode, a base directory for shards (default: auto-named temp dir)
+  - `--out`: for single report, a file path (default stdout "-"); for split‑apart or multi‑range, a base directory (default: auto‑named temp dir)
 
 - Integrations: `--github-prs`
 - Unmerged work: `--include-unmerged`
@@ -103,8 +105,8 @@ git activity-report --full --for "last month" \
   }
   ```
 
-- **Simple mode**: one JSON object with `commits[]` and optional `unmerged_activity`.
-- **Full mode**: `manifest-<label>.json` indexes shard files named `YYYY.MM.DD-HH.MM-<shortsha>.json`; a top `manifest.json` indexes multiple ranges.
+- **Single report**: one JSON object with `commits[]` and optional `unmerged_activity`.
+- **Split‑apart**: `report-<label>.json` (per‑range) with `items[]` pointing to `YYYY.MM.DD-HH.MM-<shortsha>.json` shard files; for multi‑range runs, an overall `manifest.json` indexes the per‑range reports.
 - **Schemas** (JSON Schema draft 2020‑12) live under `tests/schemas/`.
 
 ## Unmerged branch detection
@@ -133,7 +135,7 @@ just test
 - Six months of monthly shards, with PR metadata and in‑flight work:
 
 ```bash
-git activity-report --full --for "every month for the last 6 months" \
+git activity-report --split-apart --for "every month for the last 6 months" \
   --repo . --out out/last6 --github-prs --include-unmerged
 
 ## Testing: freezing time
@@ -142,7 +144,7 @@ git activity-report --full --for "every month for the last 6 months" \
 - Example:
 
 ```bash
-git activity-report --simple --for "last week" --repo . --tz utc \
+git activity-report --for "last week" --repo . --tz utc \
   --now-override 2025-08-15T12:00:00
 ```
 ```
@@ -150,7 +152,7 @@ git activity-report --simple --for "last week" --repo . --tz utc \
 - Simple JSON for a custom window using approxidate:
 
 ```bash
-git activity-report --simple --since "2 weeks ago" --until "yesterday" --repo . > span.json
+git activity-report --since "2 weeks ago" --until "yesterday" --repo . > span.json
 ```
 
 ## Troubleshooting

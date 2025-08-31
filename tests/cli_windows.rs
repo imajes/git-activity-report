@@ -4,7 +4,7 @@ mod common;
 #[test]
 fn errors_when_no_time_selection() {
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.arg("--simple");
+  // No time selection provided
   let out = cmd.output().unwrap();
   assert!(!out.status.success());
   let err = String::from_utf8_lossy(&out.stderr);
@@ -16,20 +16,20 @@ fn for_phrase_last_week_simple_smoke() {
   let repo = common::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.args(["--simple", "--for", "last week", "--repo", repo_path, "--tz", "utc"]);
+  cmd.args(["--for", "last week", "--repo", repo_path, "--tz", "utc"]);
   let out = cmd.output().unwrap();
   assert!(out.status.success());
   let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-  assert_eq!(v["mode"], "simple");
+  assert!(v["commits"].is_array());
 }
 
 #[test]
 fn month_simple_smoke() {
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
-  cmd.args(["--simple", "--month", "2025-08", "--repo", "."]);
+  cmd.args(["--month", "2025-08", "--repo", "."]);
   let out = cmd.output().unwrap();
   assert!(out.status.success());
-  assert!(String::from_utf8_lossy(&out.stdout).contains("\"mode\": \"simple\""));
+  assert!(String::from_utf8_lossy(&out.stdout).contains("\"range\""));
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn full_mode_accepts_out_dir() {
   let repo_path = repo.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
-    "--full",
+    "--split-apart",
     "--month",
     "2025-08",
     "--repo",

@@ -9,7 +9,7 @@ fn cli_simple_snapshot() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--simple",
+      
       "--since",
       "2025-08-01",
       "--until",

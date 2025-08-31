@@ -11,7 +11,7 @@ fn cli_full_top_and_manifest_snapshot() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--full",
+      "--split-apart",
       "--since",
       "2025-08-01",
       "--until",

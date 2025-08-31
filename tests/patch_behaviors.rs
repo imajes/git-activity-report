@@ -7,7 +7,6 @@ fn simple_patch_clipping_sets_flag() {
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
-    "--simple",
     "--since",
     "2025-08-01",
     "--until",
@@ -33,7 +32,6 @@ fn simple_save_patches_sets_local_path() {
   let patch_dir = tempfile::TempDir::new().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
-    "--simple",
     "--since",
     "2025-08-01",
     "--until",

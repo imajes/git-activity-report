@@ -70,7 +70,6 @@ pub struct Summary {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SimpleReport {
   pub repo: String,
-  pub mode: String, // "simple"
   pub range: Range,
   pub include_merges: bool,
   pub include_patch: bool,
@@ -78,6 +77,8 @@ pub struct SimpleReport {
   pub authors: std::collections::BTreeMap<String, i64>,
   pub summary: Summary,
   pub commits: Vec<Commit>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub items: Option<Vec<ManifestItem>>, // present when split-apart
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -144,7 +145,6 @@ pub struct RangeManifest {
   pub repo: String,
   pub include_merges: bool,
   pub include_patch: bool,
-  pub mode: String, // "full"
   pub count: usize,
   pub authors: std::collections::BTreeMap<String, i64>,
   pub summary: Summary,

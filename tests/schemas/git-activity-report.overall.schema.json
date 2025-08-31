@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/git-activity-report.overall.schema.json",
+  "title": "Git Activity Report - Overall Manifest",
+  "type": "object",
+  "required": ["repo", "generated_at", "ranges"],
+  "properties": {
+    "repo": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "split_apart": { "type": "boolean" },
+    "include_merges": { "type": "boolean" },
+    "include_patch": { "type": "boolean" },
+    "include_unmerged": { "type": "boolean" },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["range", "file"],
+        "properties": {
+          "label": { "type": ["string", "null"] },
+          "range": {
+            "type": "object",
+            "required": ["since", "until"],
+            "properties": {
+              "since": { "type": "string" },
+              "until": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "file": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

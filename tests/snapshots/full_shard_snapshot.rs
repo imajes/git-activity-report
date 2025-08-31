@@ -11,7 +11,7 @@ fn snapshot_first_shard_commit() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--full",
+      "--split-apart",
       "--since",
       "2025-08-01",
       "--until",

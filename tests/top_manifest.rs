@@ -2,19 +2,19 @@ mod common;
 use assert_cmd::Command;
 use jsonschema::validator_for;
 
-fn compile_top_schema() -> jsonschema::Validator {
+fn compile_overall_schema() -> jsonschema::Validator {
   let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
   let path = manifest_dir
     .join("tests")
     .join("schemas")
-    .join("git-activity-report.full.top.schema.json");
+    .join("git-activity-report.overall.schema.json");
   let data = std::fs::read(&path).expect("schema file");
   let v: serde_json::Value = serde_json::from_slice(&data).expect("schema json");
   validator_for(&v).expect("compile schema")
 }
 
 #[test]
-fn full_top_manifest_schema_validates_and_files_exist() {
+fn overall_manifest_schema_validates_and_files_exist() {
   let repo = common::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
@@ -23,7 +23,7 @@ fn full_top_manifest_schema_validates_and_files_exist() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--full",
+      "--split-apart",
       "--for",
       "every month for the last 2 months",
       "--repo",
@@ -48,20 +48,20 @@ fn full_top_manifest_schema_validates_and_files_exist() {
   assert!(top_json_path.exists(), "top manifest should exist");
   let top: serde_json::Value = serde_json::from_slice(&std::fs::read(&top_json_path).unwrap()).unwrap();
 
-  let compiled = compile_top_schema();
+  let compiled = compile_overall_schema();
   compiled.validate(&top).expect("top manifest schema validation failed");
 
-  let buckets = top["buckets"].as_array().expect("buckets array");
-  assert!(!buckets.is_empty());
-  for b in buckets {
-    let man = b["manifest"].as_str().expect("bucket manifest");
-    let p = std::path::Path::new(dir).join(man);
-    assert!(p.exists(), "bucket manifest path should exist");
+  let ranges = top["ranges"].as_array().expect("ranges array");
+  assert!(!ranges.is_empty());
+  for r in ranges {
+    let file = r["file"].as_str().expect("range file");
+    let p = std::path::Path::new(dir).join(file);
+    assert!(p.exists(), "range file path should exist");
   }
 }
 
 #[test]
-fn simple_top_manifest_writes_files() {
+fn simple_overall_manifest_writes_files() {
   let repo = common::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
@@ -70,7 +70,7 @@ fn simple_top_manifest_writes_files() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--simple",
+      // not split-apart; still generates an overall manifest for multi-range
       "--for",
       "every week for the last 2 weeks",
       "--repo",
@@ -94,12 +94,11 @@ fn simple_top_manifest_writes_files() {
   let top_json_path = std::path::Path::new(dir).join(manifest_file);
   assert!(top_json_path.exists(), "top manifest should exist");
   let top: serde_json::Value = serde_json::from_slice(&std::fs::read(&top_json_path).unwrap()).unwrap();
-  assert_eq!(top["mode"].as_str(), Some("simple"));
-  assert_eq!(top["multi"].as_bool(), Some(true));
-  let buckets = top["buckets"].as_array().unwrap();
-  assert!(!buckets.is_empty());
-  for b in buckets {
-    let file = b["file"].as_str().expect("bucket file");
-    assert!(std::path::Path::new(file).exists(), "bucket file path should exist");
+  let ranges = top["ranges"].as_array().unwrap();
+  assert!(!ranges.is_empty());
+  for r in ranges {
+    let file = r["file"].as_str().expect("range file");
+    let p = std::path::Path::new(dir).join(file);
+    assert!(p.exists(), "range file path should exist");
   }
 }

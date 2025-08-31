@@ -48,6 +48,27 @@ pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
   }
 }
 
+/// Clips a patch text string to a maximum number of bytes, ensuring it doesn't split a UTF-8 character.
+pub fn clip_patch(patch_text: String, max_bytes: usize) -> (Option<String>, Option<bool>) {
+  if max_bytes == 0 {
+    return (Some(patch_text), Some(false));
+  }
+
+  let bytes = patch_text.as_bytes();
+
+  if bytes.len() <= max_bytes {
+    return (Some(patch_text), Some(false));
+  }
+
+  let mut end = max_bytes;
+
+  while end > 0 && (bytes[end] & 0xC0) == 0x80 {
+    end -= 1;
+  }
+
+  (Some(String::from_utf8_lossy(&bytes[..end]).to_string()), Some(true))
+}
+
 /// Returns the effective "now" given an optional override.
 ///
 /// When `override_now` is `Some`, that instant is returned; otherwise
@@ -55,6 +76,25 @@ pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
 /// determinism without sprinkling `Local::now()` throughout the code.
 pub fn effective_now(override_now: Option<DateTime<Local>>) -> DateTime<Local> {
   override_now.unwrap_or_else(Local::now)
+}
+
+/// Prepare an output directory for multi-range or split-apart runs.
+///
+/// - When `out` is not "-", it is treated as the target directory; it will be created if needed.
+/// - When `out` is "-", a temp directory is created with a timestamped name.
+/// Returns the absolute path as a String.
+pub fn prepare_out_dir(out: &str, now_opt: Option<DateTime<Local>>) -> anyhow::Result<String> {
+  let dir = if out != "-" {
+    out.to_string()
+  } else {
+    let eff_now = effective_now(now_opt);
+    std::env::temp_dir()
+      .join(format!("activity-{}", eff_now.format("%Y%m%d-%H%M%S")))
+      .to_string_lossy()
+      .to_string()
+  };
+  std::fs::create_dir_all(&dir)?;
+  Ok(dir)
 }
 
 /// Render a section-1 man page for a clap `CommandFactory` implementor.
@@ -73,6 +113,7 @@ pub fn render_man_page<T: CommandFactory>() -> anyhow::Result<String> {
 mod tests {
   use super::*;
   use clap::Parser;
+  use chrono::{Local, TimeZone};
 
   #[test]
   fn short_sha_truncates() {
@@ -112,5 +153,52 @@ mod tests {
     let page = render_man_page::<DummyCli>().expect("render manpage");
     assert!(page.contains(".TH"));
     assert!(page.to_lowercase().contains("dummy"));
+  }
+
+  #[test]
+  fn prepare_out_dir_creates_given_directory() {
+    let td = tempfile::TempDir::new().unwrap();
+    let target = td.path().join("outdir");
+    let out = target.to_string_lossy().to_string();
+    let dir = prepare_out_dir(&out, None).expect("prepare_out_dir");
+    assert_eq!(dir, out);
+    assert!(std::path::Path::new(&dir).exists());
+  }
+
+  #[test]
+  fn prepare_out_dir_temp_includes_timestamp() {
+    let fixed = Local
+      .with_ymd_and_hms(2025, 8, 15, 12, 0, 0)
+      .single()
+      .unwrap();
+    let dir = prepare_out_dir("-", Some(fixed)).expect("prepare_out_dir temp");
+    assert!(dir.contains("activity-20250815-120000"), "dir was: {}", dir);
+    assert!(std::path::Path::new(&dir).exists());
+  }
+
+  #[test]
+  fn clip_patch_never_splits_utf8() {
+    let (p, clipped) = clip_patch("ééé".to_string(), 1);
+    assert_eq!(clipped, Some(true));
+    let out = p.unwrap();
+    assert!(out.is_char_boundary(out.len()));
+  }
+
+  #[test]
+  fn shard_name_utc_has_expected_pattern() {
+    let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-09-12...
+    assert!(name.ends_with("-abcdef123456.json"));
+    assert_eq!(name.len(), "YYYY.MM.DD-HH.MM-abcdef123456.json".len());
+  }
+}
+
+/// Formats a file name for a commit shard based on its timestamp and SHA.
+pub fn format_shard_name(epoch: i64, short_sha: &str, tz_local: bool) -> String {
+  if tz_local {
+    let dt = Local.timestamp_opt(epoch, 0).single().unwrap();
+    format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)
+  } else {
+    let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
+    format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)
   }
 }

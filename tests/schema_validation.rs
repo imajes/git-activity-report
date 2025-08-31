@@ -23,7 +23,6 @@ fn simple_json_conforms_to_schema() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--simple",
       "--since",
       "2025-08-01",
       "--until",
@@ -38,12 +37,12 @@ fn simple_json_conforms_to_schema() {
   assert!(out.status.success());
   let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
 
-  let compiled = compile_schema("git-activity-report.simple.schema.json");
+  let compiled = compile_schema("git-activity-report.report.schema.json");
   compiled.validate(&v).expect("schema validation failed for simple JSON");
 }
 
 #[test]
-fn full_manifest_conforms_to_schema_and_shards_conform() {
+fn multi_range_overall_and_reports_conform_to_schemas() {
   let repo = common::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
@@ -52,11 +51,9 @@ fn full_manifest_conforms_to_schema_and_shards_conform() {
   let out = Command::cargo_bin("git-activity-report")
     .unwrap()
     .args([
-      "--full",
-      "--since",
-      "2025-08-01",
-      "--until",
-      "2025-09-01",
+      "--split-apart",
+      "--for",
+      "every month for the last 2 months",
       "--repo",
       repo_path,
       "--out",
@@ -68,48 +65,35 @@ fn full_manifest_conforms_to_schema_and_shards_conform() {
     .unwrap();
 
   assert!(out.status.success());
-  let top: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-  let dir = top["dir"].as_str().unwrap();
-  let manifest = top["manifest"].as_str().unwrap();
-  let manifest_path = std::path::Path::new(dir).join(manifest);
-  let manifest_json: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-
-  // Validate manifest against full range schema
-  let compiled_range = compile_schema("git-activity-report.full.range.schema.json");
-  compiled_range
-    .validate(&manifest_json)
-    .expect("schema validation failed for full manifest");
+  // Pointer currently printed; load the file and validate against new overall schema
+  let top_ptr: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+  let dir = top_ptr["dir"].as_str().unwrap();
+  let manifest = top_ptr["manifest"].as_str().unwrap();
+  let overall_path = std::path::Path::new(dir).join(manifest);
+  let overall: serde_json::Value = serde_json::from_slice(&std::fs::read(&overall_path).unwrap()).unwrap();
+  let compiled_overall = compile_schema("git-activity-report.overall.schema.json");
+  compiled_overall
+    .validate(&overall)
+    .expect("overall manifest schema validation failed");
 
   // Validate each shard against commit schema
   let compiled_commit = compile_schema("git-activity-report.commit.schema.json");
-  let label = manifest_json.get("label").and_then(|v| v.as_str()).unwrap_or("");
+  // For each range entry in the overall manifest, open the referenced file and validate as a report
+  let compiled_report = compile_schema("git-activity-report.report.schema.json");
+  let ranges = overall["ranges"].as_array().expect("ranges array");
+  for r in ranges {
+    let file = r["file"].as_str().expect("range file");
+    let path = std::path::Path::new(dir).join(file);
+    let report: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    compiled_report.validate(&report).expect("range report schema");
 
-  // Helper closure to validate a shard from a relative path
-  let validate_shard = |rel: &str| {
-    let shard_path1 = std::path::Path::new(dir).join(label).join(rel);
-    let shard_path2 = std::path::Path::new(dir).join(rel);
-    let shard_path = if shard_path1.exists() { shard_path1 } else { shard_path2 };
-    let content = std::fs::read(&shard_path).expect("shard read");
-    let v: serde_json::Value = serde_json::from_slice(&content).expect("shard json");
-    compiled_commit
-      .validate(&v)
-      .expect("schema validation failed for shard");
-  };
-
-  for it in manifest_json["items"].as_array().unwrap() {
-    let rel = it["file"].as_str().unwrap();
-    validate_shard(rel);
-  }
-
-  if let Some(ua) = manifest_json.get("unmerged_activity") {
-    if let Some(branches) = ua.get("branches").and_then(|v| v.as_array()) {
-      for b in branches {
-        if let Some(items) = b.get("items").and_then(|v| v.as_array()) {
-          for it in items {
-            let rel = it["file"].as_str().unwrap();
-            validate_shard(rel);
-          }
-        }
+    // If split-apart, the report should include `items` pointing to commit shards; validate the shards
+    if let Some(items) = report.get("items").and_then(|v| v.as_array()) {
+      for it in items {
+        let rel = it["file"].as_str().unwrap();
+        let shard_path = std::path::Path::new(dir).join(rel);
+        let shard: serde_json::Value = serde_json::from_slice(&std::fs::read(&shard_path).unwrap()).unwrap();
+        compiled_commit.validate(&shard).expect("commit shard schema");
       }
     }
   }

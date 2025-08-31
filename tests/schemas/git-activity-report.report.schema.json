@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/git-activity-report.report.schema.json",
+  "title": "Git Activity Report (unified report)",
+  "description": "Unified report shape. When split-apart, this report also includes an 'items' index of per-commit files.",
+  "type": "object",
+  "required": [
+    "repo",
+    "range",
+    "include_merges",
+    "include_patch",
+    "count",
+    "authors",
+    "summary",
+    "commits"
+  ],
+  "properties": {
+    "repo": { "type": "string" },
+    "range": {
+      "type": "object",
+      "required": ["since", "until"],
+      "properties": {
+        "since": { "type": "string" },
+        "until": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "include_merges": { "type": "boolean" },
+    "include_patch": { "type": "boolean" },
+    "include_unmerged": { "type": ["boolean", "null"] },
+    "count": { "type": "integer", "minimum": 0 },
+    "authors": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+    "summary": {
+      "type": "object",
+      "required": ["additions", "deletions", "files_touched"],
+      "properties": {
+        "additions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 },
+        "files_touched": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "unmerged_activity": {
+      "type": "object",
+      "required": ["branches_scanned", "branches", "total_unmerged_commits"],
+      "properties": {
+        "branches_scanned": { "type": "integer", "minimum": 0 },
+        "total_unmerged_commits": { "type": "integer", "minimum": 0 },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "merged_into_head", "ahead_of_head", "behind_head", "commits"],
+            "properties": {
+              "name": { "type": "string" },
+              "merged_into_head": { "type": ["boolean", "null"] },
+              "ahead_of_head": { "type": ["integer", "null"] },
+              "behind_head": { "type": ["integer", "null"] },
+              "commits": { "type": "array", "items": { "$ref": "#/$defs/commit" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "commits": { "type": "array", "items": { "$ref": "#/$defs/commit" } },
+    "items": {
+      "description": "Present when split-apart; index of per-commit files",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha", "file", "subject"],
+        "properties": {
+          "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "file": { "type": "string" },
+          "subject": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "person": {
+      "type": "object",
+      "required": ["name", "email", "date"],
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "timestamps": {
+      "type": "object",
+      "required": ["author", "commit", "author_local", "commit_local", "timezone"],
+      "properties": {
+        "author": { "type": "integer" },
+        "commit": { "type": "integer" },
+        "author_local": { "type": "string" },
+        "commit_local": { "type": "string" },
+        "timezone": { "type": "string", "enum": ["local", "utc"] }
+      },
+      "additionalProperties": false
+    },
+    "fileEntry": {
+      "type": "object",
+      "required": ["file", "status"],
+      "properties": {
+        "file": { "type": "string" },
+        "status": { "type": "string" },
+        "old_path": { "type": "string" },
+        "additions": { "type": ["integer", "null"] },
+        "deletions": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "patchRef": {
+      "type": "object",
+      "required": ["embed", "git_show_cmd"],
+      "properties": {
+        "embed": { "type": "boolean" },
+        "git_show_cmd": { "type": "string" },
+        "local_patch_file": { "type": ["string", "null"] },
+        "github_diff_url": { "type": ["string", "null"] },
+        "github_patch_url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "githubPR": {
+      "type": "object",
+      "required": ["number", "title", "state", "html_url"],
+      "properties": {
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "state": { "type": "string" },
+        "created_at": { "type": ["string", "null"] },
+        "merged_at": { "type": ["string", "null"] },
+        "html_url": { "type": "string" },
+        "diff_url": { "type": ["string", "null"] },
+        "patch_url": { "type": ["string", "null"] },
+        "user": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
+        "head": { "type": ["string", "null"] },
+        "base": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "commit": {
+      "type": "object",
+      "required": ["sha", "short_sha", "parents", "author", "committer", "timestamps", "subject", "body", "files", "diffstat_text", "patch_ref"],
+      "properties": {
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "short_sha": { "type": "string", "minLength": 7, "maxLength": 20 },
+        "parents": { "type": "array", "items": { "type": "string" } },
+        "author": { "$ref": "#/$defs/person" },
+        "committer": { "$ref": "#/$defs/person" },
+        "timestamps": { "$ref": "#/$defs/timestamps" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/fileEntry" } },
+        "diffstat_text": { "type": "string" },
+        "patch": { "type": "string" },
+        "patch_clipped": { "type": "boolean" },
+        "patch_ref": { "$ref": "#/$defs/patchRef" },
+        "github_prs": { "type": "array", "items": { "$ref": "#/$defs/githubPR" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}
+
