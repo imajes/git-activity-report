@@ -5,14 +5,6 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 # Paths & tooling
 # -------------------------------------------------------------------
 SCHEMAS_DIR := "tests/schemas"
-FIXTURES_DIR := "tests/fixtures"
-
-# Ajv CLI (Draft 2020-12) — prefer local `ajv`
-AJV      := "ajv"
-AJVFLAGS := "--spec=draft2020"
-
-# Pretty printer (required for development)
-JQ := "jq"
 
 # Rust binary path
 RUST_BIN := "target/debug/git-activity-report"
@@ -29,13 +21,10 @@ _help:
   @echo "  help          # print Rust CLI --help (builds first)"
   @echo "  run-simple    # sample run of Rust CLI (prints normalized config)"
   @echo "  run-full      # sample full-mode run (config print for now)"
-  @echo "  test          # run help snapshots + golden diff"
+  @echo "  test          # run tests (nextest + coverage + schema validation)"
 
 doctor:
   set +e
-  echo "AJV CLI:"; {{AJV}} help >/dev/null 2>&1 && echo "ajv OK" || echo "ajv NOT OK"
-  echo "Testing draft engine ..."; {{AJV}} {{AJVFLAGS}} help >/dev/null 2>&1 && echo "draft2020 OK" || echo "draft2020 NOT OK"
-  if ! command -v {{JQ}} >/dev/null 2>&1; then echo "jq not found — please install jq"; exit 1; else echo "jq: $$(jq --version)"; fi
   echo "Rust toolchain:"; rustup show || true
 
 # -------------------------------------------------------------------
@@ -56,18 +45,13 @@ clippy:
 
 # Sample: print normalized config for a simple window
 run-simple: build
-  {{RUST_BIN}} --simple --for "last week" --repo . | {{JQ}} .
+  {{RUST_BIN}} --simple --for "last week" --repo .
 
 # Sample: print normalized config for a full window
 run-full: build
-  {{RUST_BIN}} --full --month 2025-08 --split-out .tmp/out | {{JQ}} .
+  {{RUST_BIN}} --full --month 2025-08 --split-out .tmp/out
 
-# # High-level test wrapper delegating to tests/Justfile
-# test: build-fixtures build
-#   just -f tests/Justfile help-py
-#   just -f tests/Justfile help-rs
-#   just -f tests/Justfile golden-rs
-#   just -f tests/Justfile validate-rs-full
+## Legacy validations and fixture flows removed in favor of Rust-side schema tests.
 
 # Spacing audit (reports potential misses; manual fixes per SPACING.md)
 audit-spacing:

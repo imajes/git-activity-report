@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This repo captures a Prototype Python CLI (`git-activity-report`) that exports Git activity to JSON for LLM-driven reporting, plus tests, schemas, and fixtures.
+This repo captures a Prototype Python CLI (`git-activity-report`) and a Rust port that exports Git activity to JSON for LLM-driven reporting, plus tests and schemas.
 Use this as a quick contributor guide.
 
 Readability Preamble — Build in Phases, Then Act
@@ -20,16 +20,11 @@ Code here is written for humans first. Build values in a clear “create” phas
   - Shard filenames: `YYYY.MM.DD-HH.MM-<shortsha>.json`; manifests: `manifest-YYYY-MM.json`, `manifest.json`.
 
 - `tests/schemas/` — JSON Schemas (Draft 2020‑12).
-- `tests/fixtures/` — validation fixtures.
-- `Justfile` — validation, formatting, fixture generation.
+- `Justfile` — build, test, formatting, spacing audit.
 
 ## Build, Test, and Development Commands
 
-**Validation (schemas/fixtures):**
-
-```bash
-just validate-all
-```
+**Validation:** schemas are validated in Rust tests using the `jsonschema` crate; run `just test`.
 
 **Python tool quick run:**
 
@@ -51,9 +46,7 @@ cargo run -- --help            # smoke test CLI
 **Utilities:**
 
 ```bash
-just build-fixtures            # synthesize tiny repo + fixtures
-just fmt-fixtures              # pretty-print fixtures with jq
-just doctor                    # tooling sanity
+just doctor                    # tooling status (Rust toolchain)
 ```
 
 ## Coding Style & Naming Conventions
@@ -81,20 +74,19 @@ just doctor                    # tooling sanity
 
 ## Testing Guidelines
 
-- Schemas: JSON Schema Draft 2020‑12, validated with `ajv-cli` (we invoke with `--spec=draft2020`).
-- Fixtures: live in `tests/fixtures/`; keep them small and deterministic.
+- Schemas: JSON Schema Draft 2020‑12 validated in‑process by tests (no external `ajv` required).
 - Add edge cases (renames `R###`, merges if `--include-merges`, clipped patches when `--max-patch-bytes > 0`).
 
 ## Workflow Checklist (Preflight)
 
-- Run `just doctor` and schema validations (`just validate-all`).
+- Run `just doctor` and tests (`just test`).
 - Build, clippy (`-D warnings`), and tests.
 - Manual spacing pass per `SPACING.md` on any touched files (Rust, Python, Justfiles).
 
 ## Commit & Pull Request Guidelines
 
 - Use clear, scoped commit messages (e.g., `feat:`, `fix:`, `refactor:`). Reference CLI flags or schema names when changing them.
-- PRs should include: a short description, sample command(s) to reproduce, and which fixtures/schemas were touched. Link to any related issues.
+- PRs should include: a short description, sample command(s) to reproduce, and any schema changes. Link to related issues.
 - Readability checklist (applied during creation, not rewrites):
   - Code adheres to `LAYOUT_SPEC.md` (build in phases, then act; extract‑before‑build; field grouping) and `SPACING_SPEC.md` (phase separation, tight mini‑phases, I/O boundaries).
   - No post‑hoc spacing/layout rewrites required; code was authored in compliance.
@@ -103,4 +95,4 @@ just doctor                    # tooling sanity
 ## Agent‑Specific Notes (Context)
 
 - The JSON is consumed by an external report‑writer agent. Do not invent links or change timestamps’ shape: `timestamps.{author,commit,author_local,commit_local,timezone}` is contract‑critical.
-- Keep schema changes additive and versioned; update fixtures and `just validate-all` accordingly.
+- Keep schema changes additive and versioned; cover with schema tests and snapshots.
