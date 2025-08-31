@@ -38,7 +38,7 @@ build:
   cargo build
 
 test:
-  NEXTEST_EXPERIMENTAL_SETUP_SCRIPTS=1 cargo llvm-cov nextest
+  cargo llvm-cov nextest
 
 fmt:
   cargo fmt --all -- --check
