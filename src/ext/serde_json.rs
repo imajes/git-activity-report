@@ -51,3 +51,28 @@ impl JsonFetch for serde_json::Value {
   }
 }
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn fetch_top_level_and_nested() {
+    let v: serde_json::Value = serde_json::json!({
+      "title": "Hello",
+      "user": { "login": "octocat" },
+      "nums": [1,2,3]
+    });
+
+    assert_eq!(v.fetch("title").to::<String>().as_deref(), Some("Hello"));
+    assert_eq!(v.fetch("user.login").to::<String>().as_deref(), Some("octocat"));
+    assert_eq!(v.fetch("missing").to::<String>(), None);
+    assert_eq!(v.fetch("").to::<serde_json::Value>().is_some(), true);
+  }
+
+  #[test]
+  fn fetch_to_or_default() {
+    let v: serde_json::Value = serde_json::json!({});
+    let s: String = v.fetch("nope").to_or_default();
+    assert_eq!(s, "");
+  }
+}

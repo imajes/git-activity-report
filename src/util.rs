@@ -48,3 +48,37 @@ pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
 }
 
 // JSON extension helpers are in `crate::ext::serde_json`.
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn short_sha_truncates() {
+    assert_eq!(short_sha("abcdef1234567890"), "abcdef123456");
+    assert_eq!(short_sha("abc"), "abc");
+  }
+
+  #[test]
+  fn iso_formats_utc_and_local() {
+    // 2024-09-12T00:30:00Z (epoch 1726101000)
+    let iso_utc = iso_in_tz(1_726_101_000, false);
+    assert!(iso_utc.ends_with('Z'));
+
+    let iso_local = iso_in_tz(1_726_101_000, true);
+    assert!(iso_local.ends_with('Z') || iso_local.contains('+') || iso_local.contains('-'));
+  }
+
+  #[test]
+  fn canonicalize_returns_abs_path() {
+    let abs = canonicalize_lossy(".");
+    assert!(abs.starts_with('/'));
+  }
+
+  #[test]
+  fn run_git_failure_is_error() {
+    let err = run_git(".", &["definitely-not-a-real-subcommand".into()]).unwrap_err();
+    let msg = format!("{:#}", err);
+    assert!(msg.contains("git"));
+  }
+}

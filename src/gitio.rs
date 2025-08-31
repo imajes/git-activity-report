@@ -352,3 +352,64 @@ pub fn unmerged_commits_in_range(
       .collect(),
   )
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn repo_path() -> String {
+    if let Ok(dir) = std::env::var("GAR_FIXTURE_REPO_DIR") {
+      return dir;
+    }
+    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("tests/.tmp/tmpdir");
+    std::fs::read_to_string(p).expect("fixture path").trim().to_string()
+  }
+
+  #[test]
+  fn rev_list_and_meta_and_stats_work() {
+    let repo = repo_path();
+    let shas = rev_list(&repo, "2025-08-01", "2025-09-01", true).unwrap();
+    assert!(shas.len() >= 2);
+    let first = &shas[0];
+    let meta = commit_meta(&repo, first).unwrap();
+    assert!(!meta.sha.is_empty());
+    assert!(!meta.subject.is_empty());
+    let (_list, map) = commit_numstat(&repo, first).unwrap();
+    assert!(!map.is_empty());
+    let ns = commit_name_status(&repo, first).unwrap();
+    assert!(!ns.is_empty());
+    let short = commit_shortstat(&repo, first).unwrap();
+    assert!(short.contains("file"));
+    let patch = commit_patch(&repo, first).unwrap();
+    assert!(patch.contains("diff --git"));
+  }
+
+  #[test]
+  fn rev_list_no_merges_branch() {
+    let repo = repo_path();
+    let shas = rev_list(&repo, "2025-08-01", "2025-09-01", false).unwrap();
+    assert!(!shas.is_empty());
+  }
+
+  #[test]
+  fn branch_queries() {
+    let repo = repo_path();
+    let current = current_branch(&repo).unwrap();
+    assert!(current.is_some());
+    let branches = list_local_branches(&repo).unwrap();
+    assert!(branches.iter().any(|b| b == "main"));
+    // In the fixture, main is reset to the feature commit, so it's merged
+    let merged = branch_merged_into_head(&repo, "feature/alpha").unwrap();
+    assert_eq!(merged, Some(true));
+    let (_behind, _ahead) = branch_ahead_behind(&repo, "feature/alpha").unwrap();
+  }
+
+  #[test]
+  fn unmerged_range() {
+    let repo = repo_path();
+    let unmerged = unmerged_commits_in_range(&repo, "feature/alpha", "2025-08-01", "2025-09-01", true).unwrap();
+    // With main reset to feature commit, there should be no unmerged commits
+    assert!(unmerged.is_empty());
+  }
+}

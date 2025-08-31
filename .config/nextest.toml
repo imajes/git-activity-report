@@ -1,9 +1,11 @@
 [profile.default]
 # Default profile: keep Nextest defaults.
 
+# Experimental feature enablement.
+experimental = ["setup-scripts"]
+
 # Experimental: setup scripts invoked once per test run.
 # See: https://nexte.st/docs/configuration/setup-scripts/
-
 [setup-scripts.fixture_repo]
 script = "tests/scripts/nextest/setup-fixture.sh"
 run-on = "workspace"

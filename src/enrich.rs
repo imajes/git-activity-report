@@ -18,6 +18,37 @@ fn parse_origin_github(repo: &str) -> Option<(String, String)> {
   None
 }
 
+#[cfg(not(test))]
+fn fetch_pulls_json(owner: &str, name: &str, sha: &str, token: &str) -> Result<serde_json::Value> {
+  let url = format!(
+    "https://api.github.com/repos/{}/{}/commits/{}/pulls",
+    owner, name, sha
+  );
+  let agent = ureq::AgentBuilder::new().build();
+
+  let response = agent
+    .get(&url)
+    .set("Accept", "application/vnd.github+json")
+    .set("User-Agent", "git-activity-report")
+    .set("Authorization", &format!("Bearer {}", token))
+    .call();
+
+  match response {
+    Ok(resp) => Ok(resp.into_json()?),
+    Err(_) => Ok(serde_json::json!([])),
+  }
+}
+
+#[cfg(test)]
+fn fetch_pulls_json(_owner: &str, _name: &str, _sha: &str, _token: &str) -> Result<serde_json::Value> {
+  if let Ok(s) = std::env::var("GAR_TEST_PR_JSON") {
+    let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+    Ok(v)
+  } else {
+    Ok(serde_json::json!([]))
+  }
+}
+
 pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
   let mut out: Vec<GithubPullRequest> = Vec::new();
 
@@ -33,30 +64,8 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
     Err(_) => return Ok(out),
   };
 
-  // Build request
-  let url = format!(
-    "https://api.github.com/repos/{}/{}/commits/{}/pulls",
-    owner, name, sha
-  );
-  let agent = ureq::AgentBuilder::new().build();
-
-  // Guard 3: HTTP call must succeed
-  let response = match agent
-    .get(&url)
-    .set("Accept", "application/vnd.github+json")
-    .set("User-Agent", "git-activity-report")
-    .set("Authorization", &format!("Bearer {}", token))
-    .call()
-  {
-    Ok(resp) => resp,
-    Err(_) => return Ok(out),
-  };
-
-  // Guard 4: response must parse as JSON
-  let parsed_json: serde_json::Value = match response.into_json() {
-    Ok(v) => v,
-    Err(_) => return Ok(out),
-  };
+  // Fetch PRs JSON (network in prod; env-provided in tests)
+  let parsed_json: serde_json::Value = fetch_pulls_json(&owner, &name, sha, &token)?;
 
   // Guard 5: top-level value must be an array
   let json_pull_requests = match parsed_json.as_array() {
@@ -97,4 +106,94 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
   }
 
   Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use serial_test::serial;
+
+  #[test]
+  fn parse_origin_none_without_remote() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let st = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    assert!(st.success());
+    assert_eq!(parse_origin_github(repo.to_str().unwrap()), None);
+  }
+
+  #[test]
+  fn parse_origin_github_detects_owner_repo() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let st = std::process::Command::new("git")
+      .args(["remote", "add", "origin", "git@github.com:openai/example.git"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
+    assert!(st.success());
+    let parsed = parse_origin_github(repo.to_str().unwrap());
+    assert_eq!(parsed, Some(("openai".to_string(), "example".to_string())));
+  }
+
+  #[test]
+  #[serial]
+  fn try_fetch_prs_no_token_returns_empty() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
+      .current_dir(repo)
+      .status();
+    // Ensure token and mocked JSON are not present for this test
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GAR_TEST_PR_JSON");
+    let out = try_fetch_prs(repo.to_str().unwrap(), "deadbeef").unwrap();
+    assert!(out.is_empty());
+  }
+
+  #[test]
+  #[serial]
+  fn try_fetch_prs_with_token_and_env_mock_returns_item() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
+      .current_dir(repo)
+      .status();
+
+    std::env::set_var("GITHUB_TOKEN", "test-token");
+
+    let body = serde_json::json!([{
+      "html_url": "https://github.com/openai/example/pull/1",
+      "number": 1,
+      "title": "Add feature",
+      "state": "open",
+      "user": {"login": "octo"},
+      "head": {"ref": "feature/x"},
+      "base": {"ref": "main"},
+      "created_at": "2024-01-01T00:00:00Z",
+      "merged_at": null
+    }]).to_string();
+    std::env::set_var("GAR_TEST_PR_JSON", body);
+
+    let out = try_fetch_prs(repo.to_string_lossy().as_ref(), "deadbeef").unwrap();
+    assert_eq!(out.len(), 1);
+    let pr = &out[0];
+    assert_eq!(pr.number, 1);
+    assert_eq!(pr.title, "Add feature");
+    assert_eq!(pr.state, "open");
+    assert_eq!(pr.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr.head.as_deref(), Some("feature/x"));
+    assert_eq!(pr.base.as_deref(), Some("main"));
+    assert_eq!(pr.html_url, "https://github.com/openai/example/pull/1");
+    assert_eq!(pr.diff_url.as_deref(), Some("https://github.com/openai/example/pull/1.diff"));
+    assert_eq!(pr.patch_url.as_deref(), Some("https://github.com/openai/example/pull/1.patch"));
+    // Cleanup env for other tests
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GAR_TEST_PR_JSON");
+  }
 }
