@@ -178,7 +178,9 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
     if let Some(buckets) = window::for_phrase_buckets(phrase, now_opt) {
       let is_full = matches!(cfg.mode, Mode::Full);
       // Choose top directory
-      let base_dir = if let Some(dir) = &cfg.split_out { dir.clone() } else {
+      let base_dir = if let Some(dir) = &cfg.split_out {
+        dir.clone()
+      } else {
         let tmp = std::env::temp_dir();
         tmp
           .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
@@ -203,7 +205,11 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
         for b in buckets {
           let params = build_full_params(&cfg, b.since.clone(), b.until.clone());
           // Override label and split_out to keep all ranges under the same top dir
-          let params = render::FullParams { split_out: Some(base_dir.clone()), label: Some(b.label.clone()), ..params };
+          let params = render::FullParams {
+            split_out: Some(base_dir.clone()),
+            label: Some(b.label.clone()),
+            ..params
+          };
           let result = render::run_full(&params)?;
           let entry = serde_json::json!({
             "label": b.label,
@@ -231,10 +237,13 @@ pub(crate) fn run_with_cli(cli: Cli) -> Result<()> {
       // Write top manifest and print pointer
       let top_manifest_path = std::path::Path::new(&base_dir).join("manifest.json");
       std::fs::write(&top_manifest_path, serde_json::to_vec_pretty(&top)?)?;
-      println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-        "dir": base_dir,
-        "manifest": "manifest.json"
-      }))?);
+      println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+          "dir": base_dir,
+          "manifest": "manifest.json"
+        }))?
+      );
 
       return Ok(());
     }
@@ -271,7 +280,11 @@ fn parse_now_override(cfg: &EffectiveConfig) -> Option<chrono::DateTime<chrono::
   cfg
     .now_override
     .as_ref()
-    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Local)))
+    .and_then(|s| {
+      chrono::DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|dt| dt.with_timezone(&chrono::Local))
+    })
     .or_else(|| {
       cfg
         .now_override

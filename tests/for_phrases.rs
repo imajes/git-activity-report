@@ -22,8 +22,14 @@ fn last_month_bounds(now: chrono::DateTime<Local>) -> (String, String) {
   let y = now.year();
   let m = now.month() as i32;
   let (last_y, last_m) = if m == 1 { (y - 1, 12) } else { (y, m - 1) };
-  let start_last = NaiveDate::from_ymd_opt(last_y, last_m as u32, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
-  let start_this = NaiveDate::from_ymd_opt(y, now.month(), 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+  let start_last = NaiveDate::from_ymd_opt(last_y, last_m as u32, 1)
+    .unwrap()
+    .and_hms_opt(0, 0, 0)
+    .unwrap();
+  let start_this = NaiveDate::from_ymd_opt(y, now.month(), 1)
+    .unwrap()
+    .and_hms_opt(0, 0, 0)
+    .unwrap();
   (
     start_last.format("%Y-%m-%dT%H:%M:%S").to_string(),
     start_this.format("%Y-%m-%dT%H:%M:%S").to_string(),
@@ -71,7 +77,17 @@ fn many_for_phrases_should_match_expected_ranges() {
   for p in phrases {
     let out = Command::cargo_bin("git-activity-report")
       .unwrap()
-      .args(["--simple", "--for", p, "--repo", repo_path, "--tz", "utc", "--now-override", fixed_now_str])
+      .args([
+        "--simple",
+        "--for",
+        p,
+        "--repo",
+        repo_path,
+        "--tz",
+        "utc",
+        "--now-override",
+        fixed_now_str,
+      ])
       .output()
       .unwrap();
 
@@ -122,7 +138,9 @@ fn many_for_phrases_should_match_expected_ranges() {
       let cur_idx = today_start.weekday().num_days_from_monday() as i64;
       let target_idx = wd.num_days_from_monday() as i64;
       let mut delta_days = cur_idx - target_idx;
-      if delta_days <= 0 { delta_days += 7; }
+      if delta_days <= 0 {
+        delta_days += 7;
+      }
       let since = today_start - chrono::Duration::days(delta_days);
       (iso(since), iso(fixed_now))
     } else {

@@ -39,9 +39,12 @@ fn full_mode_warns_out_ignored() {
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
     "--full",
-    "--month", "2025-08",
-    "--repo", repo_path,
-    "--out", "some.json",
+    "--month",
+    "2025-08",
+    "--repo",
+    repo_path,
+    "--out",
+    "some.json",
   ]);
   let out = cmd.output().unwrap();
   assert!(out.status.success());

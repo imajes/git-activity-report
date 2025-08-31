@@ -284,7 +284,9 @@ pub fn run_simple(params: &SimpleParams) -> Result<SimpleReport> {
 /// Generates a `RangeManifest` and saves individual commit "shards" to disk.
 pub fn run_full(params: &FullParams) -> Result<serde_json::Value> {
   let label = params.label.clone().unwrap_or_else(|| "window".to_string());
-  let base_dir = if let Some(dir) = &params.split_out { dir.clone() } else {
+  let base_dir = if let Some(dir) = &params.split_out {
+    dir.clone()
+  } else {
     let tmp = std::env::temp_dir();
     tmp
       .join(format!("activity-{}", Local::now().format("%Y%m%d-%H%M%S")))
@@ -634,17 +636,23 @@ mod tests {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
     let sh = |args: &[&str]| {
-      let st = std::process::Command::new("git").args(args).current_dir(repo).status().unwrap();
+      let st = std::process::Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .status()
+        .unwrap();
       assert!(st.success(), "git {:?} failed", args);
     };
     sh(&["init", "-q", "-b", "main"]);
     sh(&["config", "user.name", "Fixture Bot"]);
     sh(&["config", "user.email", "fixture@example.com"]);
     sh(&["config", "commit.gpgsign", "false"]);
-    std::fs::write(repo.join("a.txt"), "a\n").unwrap(); sh(&["add", "."]);
+    std::fs::write(repo.join("a.txt"), "a\n").unwrap();
+    sh(&["add", "."]);
     sh(&["commit", "-q", "-m", "A"]);
     sh(&["checkout", "-q", "-b", "feature/x"]);
-    std::fs::write(repo.join("b.txt"), "b\n").unwrap(); sh(&["add", "."]);
+    std::fs::write(repo.join("b.txt"), "b\n").unwrap();
+    sh(&["add", "."]);
     // Include a body to exercise body_lines derivation
     sh(&["commit", "-q", "-m", "B subject", "-m", "Body line 1\nBody line 2"]);
     sh(&["switch", "-q", "-C", "main"]);

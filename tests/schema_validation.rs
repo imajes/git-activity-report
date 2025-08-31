@@ -82,10 +82,7 @@ fn full_manifest_conforms_to_schema_and_shards_conform() {
 
   // Validate each shard against commit schema
   let compiled_commit = compile_schema("git-activity-report.commit.schema.json");
-  let label = manifest_json
-    .get("label")
-    .and_then(|v| v.as_str())
-    .unwrap_or("");
+  let label = manifest_json.get("label").and_then(|v| v.as_str()).unwrap_or("");
 
   // Helper closure to validate a shard from a relative path
   let validate_shard = |rel: &str| {

@@ -4,7 +4,10 @@ use jsonschema::validator_for;
 
 fn compile_top_schema() -> jsonschema::Validator {
   let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  let path = manifest_dir.join("tests").join("schemas").join("git-activity-report.full.top.schema.json");
+  let path = manifest_dir
+    .join("tests")
+    .join("schemas")
+    .join("git-activity-report.full.top.schema.json");
   let data = std::fs::read(&path).expect("schema file");
   let v: serde_json::Value = serde_json::from_slice(&data).expect("schema json");
   validator_for(&v).expect("compile schema")
@@ -31,7 +34,11 @@ fn full_top_manifest_schema_validates_and_files_exist() {
     .output()
     .unwrap();
 
-  assert!(out.status.success(), "cli run failed: {}", String::from_utf8_lossy(&out.stderr));
+  assert!(
+    out.status.success(),
+    "cli run failed: {}",
+    String::from_utf8_lossy(&out.stderr)
+  );
   let top_ptr: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let dir = top_ptr["dir"].as_str().expect("dir string");
   let manifest_file = top_ptr["manifest"].as_str().expect("manifest string");
@@ -74,7 +81,11 @@ fn simple_top_manifest_writes_files() {
     .output()
     .unwrap();
 
-  assert!(out.status.success(), "cli run failed: {}", String::from_utf8_lossy(&out.stderr));
+  assert!(
+    out.status.success(),
+    "cli run failed: {}",
+    String::from_utf8_lossy(&out.stderr)
+  );
   let top_ptr: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let dir = top_ptr["dir"].as_str().expect("dir string");
   let manifest_file = top_ptr["manifest"].as_str().expect("manifest string");

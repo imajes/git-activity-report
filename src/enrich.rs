@@ -1,5 +1,5 @@
-use crate::model::GithubPullRequest;
 use crate::ext::serde_json::JsonFetch;
+use crate::model::GithubPullRequest;
 use crate::util::run_git;
 use anyhow::Result;
 
@@ -20,10 +20,7 @@ fn parse_origin_github(repo: &str) -> Option<(String, String)> {
 
 #[cfg(not(test))]
 fn fetch_pulls_json(owner: &str, name: &str, sha: &str, token: &str) -> Result<serde_json::Value> {
-  let url = format!(
-    "https://api.github.com/repos/{}/{}/commits/{}/pulls",
-    owner, name, sha
-  );
+  let url = format!("https://api.github.com/repos/{}/{}/commits/{}/pulls", owner, name, sha);
   let agent = ureq::AgentBuilder::new().build();
 
   let response = agent
@@ -78,9 +75,7 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
     let html = pr_json.fetch("html_url").to_or_default::<String>();
 
     let pr_user_login = pr_json.fetch("user.login").to::<String>();
-    let pr_user = pr_user_login.map(|login| crate::model::GithubUser {
-      login: Some(login),
-    });
+    let pr_user = pr_user_login.map(|login| crate::model::GithubUser { login: Some(login) });
 
     let pr_head = pr_json.fetch("head.ref").to::<String>();
 
@@ -98,8 +93,16 @@ pub fn try_fetch_prs(repo: &str, sha: &str) -> Result<Vec<GithubPullRequest>> {
       merged_at: pr_json.fetch("merged_at").to::<String>(),
 
       html_url: html.clone(),
-      diff_url: if html.is_empty() { None } else { Some(format!("{}.diff", html)) },
-      patch_url: if html.is_empty() { None } else { Some(format!("{}.patch", html)) },
+      diff_url: if html.is_empty() {
+        None
+      } else {
+        Some(format!("{}.diff", html))
+      },
+      patch_url: if html.is_empty() {
+        None
+      } else {
+        Some(format!("{}.patch", html))
+      },
     };
 
     out.push(pr_item);
@@ -117,7 +120,11 @@ mod tests {
   fn parse_origin_none_without_remote() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
-    let st = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let st = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
     assert!(st.success());
     assert_eq!(parse_origin_github(repo.to_str().unwrap()), None);
   }
@@ -126,7 +133,11 @@ mod tests {
   fn parse_origin_github_detects_owner_repo() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
-    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
     let st = std::process::Command::new("git")
       .args(["remote", "add", "origin", "git@github.com:openai/example.git"])
       .current_dir(repo)
@@ -142,7 +153,11 @@ mod tests {
   fn try_fetch_prs_no_token_returns_empty() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
-    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
     let _ = std::process::Command::new("git")
       .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
       .current_dir(repo)
@@ -159,7 +174,11 @@ mod tests {
   fn try_fetch_prs_with_token_and_env_mock_returns_item() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
-    let _ = std::process::Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
     let _ = std::process::Command::new("git")
       .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
       .current_dir(repo)
@@ -177,7 +196,8 @@ mod tests {
       "base": {"ref": "main"},
       "created_at": "2024-01-01T00:00:00Z",
       "merged_at": null
-    }]).to_string();
+    }])
+    .to_string();
     std::env::set_var("GAR_TEST_PR_JSON", body);
 
     let out = try_fetch_prs(repo.to_string_lossy().as_ref(), "deadbeef").unwrap();
@@ -190,8 +210,14 @@ mod tests {
     assert_eq!(pr.head.as_deref(), Some("feature/x"));
     assert_eq!(pr.base.as_deref(), Some("main"));
     assert_eq!(pr.html_url, "https://github.com/openai/example/pull/1");
-    assert_eq!(pr.diff_url.as_deref(), Some("https://github.com/openai/example/pull/1.diff"));
-    assert_eq!(pr.patch_url.as_deref(), Some("https://github.com/openai/example/pull/1.patch"));
+    assert_eq!(
+      pr.diff_url.as_deref(),
+      Some("https://github.com/openai/example/pull/1.diff")
+    );
+    assert_eq!(
+      pr.patch_url.as_deref(),
+      Some("https://github.com/openai/example/pull/1.patch")
+    );
     // Cleanup env for other tests
     std::env::remove_var("GITHUB_TOKEN");
     std::env::remove_var("GAR_TEST_PR_JSON");

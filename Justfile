@@ -20,6 +20,7 @@ _help:
   @echo "  man-install   # install man page to ~/.local/share/man/man1"
   @echo "  test          # cargo test"
   @echo "  fmt           # cargo fmt --check"
+  @echo "  fmt-fix       # cargo fmt"
   @echo "  clippy        # cargo clippy -D warnings"
   @echo "  help          # print Rust CLI --help (builds first)"
   @echo "  run-simple    # sample run of Rust CLI (prints normalized config)"
@@ -41,7 +42,10 @@ test:
   cargo llvm-cov nextest
 
 fmt:
-  cargo fmt --all -- --check
+  cargo fmt --all --check
+
+fmt-fix:
+  cargo fmt --all
 
 clippy:
   cargo clippy -- -D warnings

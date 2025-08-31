@@ -11,9 +11,7 @@ impl<'a> JsonFetched<'a> {
   where
     T: DeserializeOwned,
   {
-    self
-      .inner
-      .and_then(|v| serde_json::from_value::<T>(v.clone()).ok())
+    self.inner.and_then(|v| serde_json::from_value::<T>(v.clone()).ok())
   }
 
   /// Deserialize as `T`, returning `T::default()` on failure.
@@ -21,9 +19,7 @@ impl<'a> JsonFetched<'a> {
   where
     T: DeserializeOwned + Default,
   {
-    self
-      .to::<T>()
-      .unwrap_or_default()
+    self.to::<T>().unwrap_or_default()
   }
 }
 

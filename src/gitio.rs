@@ -361,8 +361,7 @@ mod tests {
     if let Ok(dir) = std::env::var("GAR_FIXTURE_REPO_DIR") {
       return dir;
     }
-    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("tests/.tmp/tmpdir");
+    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/.tmp/tmpdir");
     std::fs::read_to_string(p).expect("fixture path").trim().to_string()
   }
 

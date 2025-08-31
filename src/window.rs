@@ -129,7 +129,7 @@ fn current_local_now() -> chrono::DateTime<chrono::Local> {
 /// Compute range for a natural-language phrase, with optional `now` override for tests.
 fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) -> Result<(String, String)> {
   let phrase = input.trim().to_lowercase();
-  let now = now.unwrap_or_else(|| Local::now());
+  let now = now.unwrap_or_else(Local::now);
 
   // Prefer library support; avoid custom anchoring when better alternates exist.
   // Override: for "today" and "yesterday", anchor to local day start / 24h ago, ending at now.
@@ -209,7 +209,7 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
         if months < 0 {
           (subtract_months(now, months.unsigned_abs() as i32), now)
         } else {
-          (now, subtract_months(now, -(months as i32)))
+          (now, subtract_months(now, -months))
         }
       }
     };
@@ -236,7 +236,7 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
 /// Build labeled ranges for multi-bucket phrases, with optional `now` override for tests.
 pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Local>>) -> Option<Vec<LabeledRange>> {
   let phrase = input.trim().to_lowercase();
-  let now = now.unwrap_or_else(|| Local::now());
+  let now = now.unwrap_or_else(Local::now);
 
   // every month for the last N months
   if let Some(caps) = regex::Regex::new(r"^every\s+month\s+for\s+the\s+last\s+(\d+)\s+months?$")
