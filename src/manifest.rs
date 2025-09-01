@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Build and write overall manifest for multi-range runs
+// role: persistence/manifest
+// inputs: repo id, generated_at, flags snapshot, base_dir, RangeEntry[]
+// outputs: manifest.json file written under base_dir
+// side_effects: Writes to filesystem
+// invariants:
+// - manifest contains ranges[] in chronological order of entries provided
+// - file paths in entries are relative to base_dir and point to report-<label>.json
+// - generated_at is serialized in %Y-%m-%dT%H:%M:%S (local)
+// errors: IO errors surfaced with full path context
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use anyhow::Result;
 use chrono::{DateTime, Local};
 

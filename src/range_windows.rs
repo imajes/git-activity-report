@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Resolve time windows into labeled ranges; parse "now" overrides; helpers for natural language buckets
+// role: resolution/parser
+// inputs: WindowSpec (Month | ForPhrase | SinceUntil); optional now override
+// outputs: Vec<LabeledRange> (chronological earliest→latest); parsed DateTime for now when requested
+// side_effects: none (pure)
+// invariants:
+// - resolve_ranges returns at least one range; ForPhrase buckets are ordered earliest→latest
+// - month_bounds yields [start_of_month, start_of_next_month]
+// - parse_now accepts RFC3339 or naive %Y-%m-%dT%H:%M:%S and never panics
+// errors: Invalid month/phrase formats return contextual errors; non-fatal fallbacks choose git approxidate-friendly strings
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Datelike, Local, NaiveDate, Timelike};
 use chrono_english::{Interval, parse_duration};
@@ -512,4 +527,3 @@ mod future_tests {
     assert!(un.month() == 2 || un.month() == 3);
   }
 }
-

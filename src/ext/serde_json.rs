@@ -1,3 +1,12 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Provide ergonomic nested JSON fetching via dotted paths and safe typed extraction for serde_json::Value
+// role: extension/serde_json
+// outputs: JsonFetch trait and JsonFetched wrapper for typed extraction with defaults
+// invariants: No panics; missing paths yield None; to_or_default returns T::default on failure
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use serde::de::DeserializeOwned;
 
 /// Wrapper around a JSON location to allow typed extraction via a clear second step.

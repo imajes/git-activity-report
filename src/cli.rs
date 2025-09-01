@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Parse CLI flags and produce an EffectiveConfig with consistent defaults and implied flags
+// role: cli/normalization
+// inputs: OS argv (via clap); repo path; window selection flags; enrichment/detail flags
+// outputs: EffectiveConfig with normalized paths and flags; multi_windows is initialized false (set later)
+// side_effects: none (pure with respect to filesystem); may canonicalize paths
+// invariants:
+// - exactly one window selection is provided: --month | --for | (--since & --until)
+// - --detailed implies include_unmerged/include_patch/github_prs
+// - out semantics: file path when single non-split; directory when split or multi
+// errors: Invalid window selection or conflicting flags result in early bail!
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use serde::{Deserialize, Serialize};

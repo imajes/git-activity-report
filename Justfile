@@ -26,6 +26,9 @@ _help:
   @echo "  run-simple    # sample run of Rust CLI (prints normalized config)"
   @echo "  run-full      # sample full-mode run (config print for now)"
   @echo "  test          # run tests (nextest + coverage + schema validation)"
+  @echo "  new-cycle     # scaffold a new agent cycle log"
+  @echo "  check-headers # verify module headers have purpose/role"
+  @echo "  ci-check      # verify cycle presence and headers (CI gate)"
 
 doctor:
   set +e
@@ -93,3 +96,15 @@ audit-spacing-strict:
 
 lint-md:
   markdownlint-cli2 --fix "**/*.md"
+
+# Scaffold a new agent cycle log from TASK_TEMPLATE
+new-cycle desc="work-cycle":
+  bash scripts/new_cycle.sh "{{desc}}"
+
+# Verify required module headers exist
+check-headers:
+  bash scripts/check_module_headers.sh
+
+ci-check:
+  bash scripts/check_cycle_presence.sh
+  bash scripts/check_module_headers.sh

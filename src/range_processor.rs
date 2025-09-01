@@ -1,3 +1,19 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Orchestrate per-range processing: generate report JSON and save artifacts; assemble overall manifest for multi-range runs
+// role: processing/orchestrator
+// inputs: EffectiveConfig (with split_apart and multi_windows), Vec<LabeledRange>, optional now
+// outputs: Files on disk (reports, shards), optional manifest.json; stdout pointer or JSON per state
+// side_effects: Creates directories; writes JSON files; prints to stdout
+// invariants:
+// - base_dir is prepared when split_apart || multi_windows
+// - per-range report file name is report-<label>.json when written to disk
+// - multi_windows ⇒ manifest.json exists and pointer {dir, manifest} printed
+// - single split ⇒ pointer {dir, file} printed; single non-split ⇒ JSON printed or written to --out
+// errors: Propagates generation/save/write errors with file path context
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use anyhow::Result;
 
 use crate::cli;

@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Assemble per-range reports; when split_apart, write commit shards and per-range report, returning a pointer
+// role: assembly/render
+// inputs: ReportParams (repo, since/until, flags, label, out dir)
+// outputs: SimpleReport JSON (non-split) or pointer {dir, file} (split)
+// side_effects: In split mode, writes shard files under <base>/<label>/ and report-<label>.json; may write .patch files if requested
+// invariants:
+// - run_simple returns fully in-memory report consistent with schema
+// - run_report returns pointer JSON when split; otherwise full report JSON; file names are stable
+// - shard filenames follow YYYY.MM.DD-HH.MM-<shortsha>.json
+// errors: Propagates git and IO errors with context (paths, git args)
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 

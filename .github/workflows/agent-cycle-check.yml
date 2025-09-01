@@ -1,0 +1,25 @@
+name: Agent Cycle Check
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (markdownlint optional)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bash
+
+      - name: Cycle presence check
+        run: bash scripts/check_cycle_presence.sh
+
+      - name: Module headers check
+        run: bash scripts/check_module_headers.sh
+

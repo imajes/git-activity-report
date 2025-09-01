@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Construct per-commit objects; enrich with optional PR links; embed or save patches as configured
+// role: commit construction/enrichment
+// inputs: repo path, commit sha, ProcessContext (tz, flags, limits)
+// outputs: Commit structs with files/diffstat/patch_ref; optional patch text and saved patch files
+// side_effects: Reads git; may write .patch files to disk (save_patch_to_disk)
+// invariants:
+// - clip_patch preserves UTF-8 boundaries; patch_clipped is accurate
+// - body_lines derived when body is non-empty
+// - enrichment is best-effort; absence of PRs leaves fields None
+// errors: Propagates git IO errors; enrichment failures are swallowed (best-effort)
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use anyhow::Result;
 
 use crate::gitio;

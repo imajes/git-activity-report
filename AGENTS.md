@@ -3,12 +3,9 @@
 This repo captures a Prototype Python CLI (`git-activity-report`) and a Rust port that exports Git activity to JSON for LLM-driven reporting, plus tests and schemas.
 Use this as a quick contributor guide.
 
-Readability Preamble — Build in Phases, Then Act
+Readability Preamble — Core Guidance for Agents
 
-Code here is written for humans first. Build values in a clear “create” phase (extract, compute, assemble), then perform side‑effects or mutations in a separate “act” phase (push/insert/write/return), with a single blank line separating phases. Follow these references when authoring code — apply them as you write, not post‑hoc:
-
-- Layout (structure and ordering): see docs/LAYOUT_SPEC.md
-- Spacing (vertical separation): see docs/SPACING_SPEC.md
+Build in phases, decide state once, and keep IO at the edges. Resolve windows into labeled ranges up front, set `multi_windows` explicitly, then process ranges in a single loop with a fixed lifecycle (generate → save → index). Make outputs contract‑strong (per‑range `report-<label>.json`, top‑level `manifest.json`), and write code in readable steps: extract before build, one concern per statement, one blank between phases. The rationale lives in docs/CODING_PHILOSOPHY.md; apply the structural rules from docs/LAYOUT_SPEC.md and the vertical separation rules from docs/SPACING_SPEC.md while authoring, not as a post‑hoc pass.
 
 ## Project Structure & Module Organization
 
@@ -61,6 +58,17 @@ just doctor                    # tooling status (Rust toolchain)
 - Error handling: prefer `anyhow`/`thiserror` patterns if introduced; otherwise `Result<T, E>` with context.
 - Keep JSON field shapes **identical** to Python Schema v2.
 
+Decision Precedence (Tie‑Breakers)
+
+- When goals conflict, resolve in this order (highest first):
+  1. Contract stability (filenames, schema, pointer shapes)
+  2. Orchestration simplicity (single loop, explicit state)
+  3. Correctness/testability (pure helpers, invariants)
+  4. Performance (avoid duplicate heavy work)
+  5. Minimal diff size/readability
+
+See AGENT_RUBRIC.md for the operational checklist and acceptance criteria.
+
 ### Spacing & Readability
 
 - Follow `docs/SPACING_SPEC.md` for human‑friendly blank‑line spacing, and `docs/LAYOUT_SPEC.md` for structural layout rules. Apply them during creation — not as a post‑hoc tool, to prevent endless rewrites.
@@ -90,7 +98,25 @@ just doctor                    # tooling status (Rust toolchain)
 - Readability checklist (applied during creation, not rewrites):
   - Code adheres to `docs/LAYOUT_SPEC.md` (build in phases, then act; extract‑before‑build; field grouping) and `docs/SPACING_SPEC.md` (phase separation, tight mini‑phases, I/O boundaries).
   - No post‑hoc spacing/layout rewrites required; code was authored in compliance.
-  - Optional assistive checks: `just audit-spacing` (or `just audit-spacing-strict` when requested) are clean.
+- Optional assistive checks: `just audit-spacing` (or `just audit-spacing-strict` when requested) are clean.
+- Module headers lint: `just check-headers` ensures `purpose:` and `role:` headers exist in `src/` files; keep files self-documenting.
+
+## Agent Protocol (Enforced)
+
+- Step 0 — Start a cycle: Run `just new-cycle "short description"`. Fill the template and keep it updated during the work.
+- Step 1 — Generate overlay: The command writes `.agents/repo_overlay.json` used by agents/tooling to ground states and roles.
+- Step 2 — Build in phases per the rubric and specs (LAYOUT/SPACING).
+- Step 3 — Checks: `just ci-check` before commit/PR.
+
+Enforcement options:
+
+- Git hooks (local): enable with `git config core.hooksPath .githooks`. The pre-commit hook runs cycle and header checks.
+- CI (server): `.github/workflows/agent-cycle-check.yml` blocks merges if cycle/header checks fail.
+
+## Agent Cycles Log
+
+- Maintain per-cycle records under `.agents/cycles/` using `docs/TASK_TEMPLATE.md`. See `docs/AGENT_CYCLES.md` for naming and workflow.
+- Generate a short project overlay from `AGENT_RUBRIC.md` at the start of each cycle to ground states, artifacts, and acceptance criteria.
 
 ## Agent‑Specific Notes (Context)
 

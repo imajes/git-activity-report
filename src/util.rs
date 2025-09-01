@@ -1,3 +1,18 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Utilities for paths, time formatting, spacing-safe helpers, and man page rendering
+// role: utilities/helpers
+// inputs: Various primitives; DateTime; paths; clap CommandFactory
+// outputs: Canonicalized paths, formatted timestamps, directories ensured, man page text
+// side_effects: prepare_out_dir creates directories; run_git invokes subprocesses
+// invariants:
+// - prepare_out_dir returns an existing directory (either provided or temp timestamped)
+// - clip_patch never splits UTF-8; indicates clipping accurately
+// - format_shard_name pattern is stable and locale-independent
+// errors: run_git surfaces command + stderr; IO errors bubble with context
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

@@ -1,3 +1,12 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Provide thin, robust wrappers around `git` CLI to retrieve commit metadata, diffs, stats, and branch info for report generation
+// role: git/io-helpers
+// outputs: Parsed commit meta, numstat/name-status, shortstat, patch text; branch names and ahead/behind/merged signals
+// invariants: Commands include explicit flags; outputs parsed defensively; functions never panic on malformed git output
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 // --- Git I/O Helpers ---
 // Thin wrappers around `git` commands with small parsing utilities.
 

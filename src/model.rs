@@ -1,3 +1,12 @@
+// === Module Header (agents-tooling) START ===
+// header: Parsed by scripts/check_module_headers.sh for purpose/role presence; keep keys on single-line entries.
+// purpose: Define the JSON model (commits, ranges, manifests, GitHub PRs) shared by rendering and enrichment
+// role: model/types
+// outputs: Serializable structs with stable field names and optional enrichment fields
+// invariants: JSON field shapes match Python schema v2; additive fields only; timestamps shape unchanged
+// tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
+// === Module Header END ===
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
