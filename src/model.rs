@@ -87,6 +87,8 @@ pub struct SimpleReport {
   pub summary: Summary,
   pub commits: Vec<Commit>,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub pull_requests: Option<Vec<GithubPullRequest>>, // aggregated PRs across commits
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub items: Option<Vec<ManifestItem>>, // present when split-apart
 }
 
@@ -108,9 +110,13 @@ pub struct GithubPullRequest {
   pub title: String,
   pub state: String,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub body: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub created_at: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub merged_at: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub closed_at: Option<String>,
   pub html_url: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub diff_url: Option<String>,
@@ -122,6 +128,15 @@ pub struct GithubPullRequest {
   pub head: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub base: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub commits: Option<Vec<PullRequestCommit>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PullRequestCommit {
+  pub sha: String,
+  pub short_sha: String,
+  pub subject: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

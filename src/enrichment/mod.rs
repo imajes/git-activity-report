@@ -6,5 +6,6 @@
 // invariants: Each enrichment isolates external integrations and remains best-effort
 // tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
 // === Module Header END ===
-pub mod github_pull_requests;
 
+pub mod github_pull_requests;
+pub mod github_api;

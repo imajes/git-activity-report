@@ -95,6 +95,13 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
 
   summary.files_touched = files_touched.len();
 
+  let pull_requests = if params.github_prs {
+    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
+      .or(Some(Vec::new()))
+  } else {
+    None
+  };
+
   let report = SimpleReport {
     repo: params.repo.clone(),
     range: Range {
@@ -107,6 +114,7 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
     authors,
     summary,
     commits,
+    pull_requests,
     items: None,
   };
 
@@ -165,6 +173,13 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     commits.push(c);
   }
 
+  let pull_requests = if params.github_prs {
+    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
+      .or(Some(Vec::new()))
+  } else {
+    None
+  };
+
   let report = SimpleReport {
     repo: params.repo.clone(),
     range: Range {
@@ -177,6 +192,7 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     authors,
     summary,
     commits,
+    pull_requests,
     items: Some(items),
   };
 
