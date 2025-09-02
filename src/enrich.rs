@@ -23,7 +23,22 @@ pub fn aggregate_report_enrichments(commits: &[Commit], repo: &str, github_prs: 
   if !github_prs {
     return None;
   }
-  crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(commits, repo)
+  crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(
+    commits,
+    repo,
+    false,
+    false,
+    crate::enrichment::effort::PrEstimateParams {
+      review_approved_min: 9.0,
+      review_changes_min: 6.0,
+      review_commented_min: 4.0,
+      files_overhead_per_review_min: 0.2,
+      day_drag_min: 7.0,
+      pr_assembly_min: 10.0,
+      approver_only_min: 10.0,
+      cycle_time_cap_ratio: 0.5,
+    },
+  )
 }
 
 #[cfg(test)]

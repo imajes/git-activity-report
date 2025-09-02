@@ -285,7 +285,12 @@
         },
         "additionalProperties": true
       }
-    }
+    },
+    "estimated_minutes": { "type": ["number", "null"] },
+    "estimated_minutes_min": { "type": ["number", "null"] },
+    "estimated_minutes_max": { "type": ["number", "null"] },
+    "estimate_confidence": { "type": ["number", "null"] },
+    "estimate_basis": { "type": ["string", "null"] }
   },
   "additionalProperties": true
 }

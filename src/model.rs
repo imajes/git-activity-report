@@ -67,6 +67,16 @@ pub struct Commit {
   pub github_prs: Option<Vec<GithubPullRequest>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub body_lines: Option<Vec<String>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_min: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_max: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_confidence: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_basis: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,6 +84,8 @@ pub struct Summary {
   pub additions: i64,
   pub deletions: i64,
   pub files_touched: usize,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_total: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,6 +102,10 @@ pub struct SimpleReport {
   pub pull_requests: Option<Vec<GithubPullRequest>>, // aggregated PRs across commits
   #[serde(skip_serializing_if = "Option::is_none")]
   pub items: Option<Vec<ManifestItem>>, // present when split-apart
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub authors_minutes: Option<std::collections::BTreeMap<String, f64>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub reviewers_minutes: Option<std::collections::BTreeMap<String, f64>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -134,6 +150,18 @@ pub struct GithubPullRequest {
   pub base: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub commits: Option<Vec<PullRequestCommit>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_min: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_max: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_confidence: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_basis: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub reviewers_minutes_by_github_login: Option<std::collections::BTreeMap<String, f64>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -278,6 +278,12 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       head,
       base,
       commits: None,
+      estimated_minutes: None,
+      estimated_minutes_min: None,
+      estimated_minutes_max: None,
+      estimate_confidence: None,
+      estimate_basis: None,
+      reviewers_minutes_by_github_login: None,
     };
     out.push(item);
   }

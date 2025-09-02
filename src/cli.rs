@@ -57,6 +57,47 @@ pub struct Cli {
   #[arg(long)]
   pub detailed: bool,
 
+  /// Compute effort estimates for commits and PRs
+  #[arg(long)]
+  pub estimate_effort: bool,
+
+  /// Verbose mode: print debug details to stderr
+  #[arg(long)]
+  pub verbose: bool,
+
+  // Effort estimation knobs (calibration)
+  /// Minutes added per APPROVED review
+  #[arg(long, default_value_t = 9.0)]
+  pub estimate_review_approved_minutes: f64,
+
+  /// Minutes added per CHANGES_REQUESTED review
+  #[arg(long, default_value_t = 6.0)]
+  pub estimate_review_changes_minutes: f64,
+
+  /// Minutes added per COMMENTED review
+  #[arg(long, default_value_t = 4.0)]
+  pub estimate_review_commented_minutes: f64,
+
+  /// Minutes added per extra review scaled by files_total
+  #[arg(long, default_value_t = 0.2)]
+  pub estimate_files_overhead_per_review_minutes: f64,
+
+  /// Minutes added per extra day across PR commits
+  #[arg(long, default_value_t = 7.0)]
+  pub estimate_day_drag_minutes: f64,
+
+  /// Flat minutes for PR assembly/description
+  #[arg(long, default_value_t = 10.0)]
+  pub estimate_pr_assembly_minutes: f64,
+
+  /// Minutes bump when approver known but reviews missing
+  #[arg(long, default_value_t = 10.0)]
+  pub estimate_approver_only_minutes: f64,
+
+  /// Cap ratio vs. PR cycle time (0..1)
+  #[arg(long, default_value_t = 0.5)]
+  pub estimate_cycle_time_cap: f64,
+
   /// Include merge commits
   #[arg(long)]
   pub include_merges: bool,
@@ -115,6 +156,16 @@ pub struct EffectiveConfig {
   pub include_unmerged: bool,
   pub tz: Tz,
   pub now_override: Option<String>,
+  pub estimate_effort: bool,
+  pub verbose: bool,
+  pub estimate_review_approved_minutes: f64,
+  pub estimate_review_changes_minutes: f64,
+  pub estimate_review_commented_minutes: f64,
+  pub estimate_files_overhead_per_review_minutes: f64,
+  pub estimate_day_drag_minutes: f64,
+  pub estimate_pr_assembly_minutes: f64,
+  pub estimate_approver_only_minutes: f64,
+  pub estimate_cycle_time_cap: f64,
 }
 
 pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
@@ -139,6 +190,7 @@ pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
   let include_unmerged = cli.include_unmerged || cli.detailed;
   let include_patch = cli.include_patch || cli.detailed;
   let github_prs = cli.github_prs || cli.detailed;
+  let estimate_effort = cli.estimate_effort || cli.detailed;
 
   let repo = util::canonicalize_lossy(&cli.repo);
 
@@ -156,6 +208,16 @@ pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     include_unmerged,
     tz: cli.tz,
     now_override: cli.now_override.clone(),
+    estimate_effort,
+    verbose: cli.verbose,
+    estimate_review_approved_minutes: cli.estimate_review_approved_minutes,
+    estimate_review_changes_minutes: cli.estimate_review_changes_minutes,
+    estimate_review_commented_minutes: cli.estimate_review_commented_minutes,
+    estimate_files_overhead_per_review_minutes: cli.estimate_files_overhead_per_review_minutes,
+    estimate_day_drag_minutes: cli.estimate_day_drag_minutes,
+    estimate_pr_assembly_minutes: cli.estimate_pr_assembly_minutes,
+    estimate_approver_only_minutes: cli.estimate_approver_only_minutes,
+    estimate_cycle_time_cap: cli.estimate_cycle_time_cap,
   })
 }
 
@@ -173,6 +235,16 @@ mod tests {
       until: None,
       split_apart: false,
       detailed: false,
+      estimate_effort: false,
+      verbose: false,
+      estimate_review_approved_minutes: 9.0,
+      estimate_review_changes_minutes: 6.0,
+      estimate_review_commented_minutes: 4.0,
+      estimate_files_overhead_per_review_minutes: 0.2,
+      estimate_day_drag_minutes: 7.0,
+      estimate_pr_assembly_minutes: 10.0,
+      estimate_approver_only_minutes: 10.0,
+      estimate_cycle_time_cap: 0.5,
       include_merges: false,
       include_patch: false,
       max_patch_bytes: 0,
@@ -207,5 +279,6 @@ mod tests {
     assert!(cfg.include_unmerged);
     assert!(cfg.include_patch);
     assert!(cfg.github_prs);
+    assert!(cfg.estimate_effort);
   }
 }
