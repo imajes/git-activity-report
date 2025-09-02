@@ -31,19 +31,19 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   let mf: serde_json::Value = serde_json::from_slice(&std::fs::read(&report_path).unwrap()).unwrap();
 
   // Top-level manifest shape
-  assert!(mf["range"].is_object());
-  let range = &mf["range"];
-  assert!(range["since"].as_str().unwrap().starts_with("2025-08-01"));
-  assert!(range["until"].as_str().unwrap().starts_with("2025-09-01"));
-  assert!(mf["repo"].as_str().is_some());
-  assert_eq!(mf["include_merges"].as_bool().unwrap(), true);
-  assert_eq!(mf["include_patch"].as_bool().unwrap(), false);
-  assert!(mf["count"].as_u64().unwrap() >= 1);
+  assert!(mf["summary"].is_object());
+  let range = &mf["summary"]["range"];
+  assert!(range["start"].as_str().unwrap().starts_with("2025-08-01"));
+  assert!(range["end"].as_str().unwrap().starts_with("2025-09-01"));
+  assert!(mf["summary"]["repo"].as_str().is_some());
+  assert_eq!(mf["summary"]["report_options"]["include_merges"].as_bool().unwrap(), true);
+  assert_eq!(mf["summary"]["report_options"]["include_patch"].as_bool().unwrap(), false);
+  assert!(mf["summary"]["count"].as_u64().unwrap() >= 1);
   assert!(mf["authors"].is_object());
-  let summary = &mf["summary"];
-  assert!(summary["additions"].as_i64().is_some());
-  assert!(summary["deletions"].as_i64().is_some());
-  assert!(summary["files_touched"].as_u64().is_some());
+  let summary_changes = &mf["summary"]["changeset"];
+  assert!(summary_changes["additions"].as_i64().is_some());
+  assert!(summary_changes["deletions"].as_i64().is_some());
+  assert!(summary_changes["files_touched"].as_u64().is_some());
 
   // Items shape
   let items = mf["items"].as_array().unwrap();
@@ -70,7 +70,9 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   let c: serde_json::Value = serde_json::from_slice(&std::fs::read(&shard_path).unwrap()).unwrap();
   assert!(c["sha"].as_str().is_some());
   assert!(c["timestamps"]["timezone"].as_str().is_some());
-  assert!(c["patch_ref"]["git_show_cmd"].as_str().unwrap().starts_with("git show"));
+  assert!(
+    c["patch_references"]["git_show_cmd"].as_str().unwrap().starts_with("git show")
+  );
   if let Some(f0) = c["files"].as_array().and_then(|a| a.first()) {
     assert!(f0["file"].as_str().is_some());
     assert!(f0["status"].as_str().is_some());

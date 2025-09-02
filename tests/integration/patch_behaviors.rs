@@ -46,6 +46,6 @@ fn simple_save_patches_sets_local_path() {
   let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let commits = v["commits"].as_array().unwrap();
   assert!(!commits.is_empty());
-  let path = commits[0]["patch_ref"]["local_patch_file"].as_str().unwrap();
+  let path = commits[0]["patch_references"]["local_patch_file"].as_str().unwrap();
   assert!(std::path::Path::new(path).exists());
 }

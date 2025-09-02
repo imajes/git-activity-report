@@ -44,6 +44,9 @@ build:
 test:
   cargo llvm-cov nextest
 
+test-all:
+  cargo llvm-cov nextest --max-fail 100000
+
 fmt:
   cargo fmt --all --check
 

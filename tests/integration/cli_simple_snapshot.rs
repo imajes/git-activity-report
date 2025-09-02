@@ -31,6 +31,9 @@ fn cli_simple_snapshot() {
   if let Some(obj) = v.as_object_mut() {
     obj.insert("repo".into(), serde_json::Value::String("<repo>".into()));
   }
+  if let Some(summary) = v.get_mut("summary").and_then(|s| s.as_object_mut()) {
+    summary.insert("repo".into(), serde_json::Value::String("<repo>".into()));
+  }
   // Normalize unstable fields for snapshot stability
   if let Some(commits) = v.get_mut("commits").and_then(|c| c.as_array_mut()) {
     for c in commits.iter_mut() {
@@ -54,8 +57,16 @@ fn cli_simple_snapshot() {
           ts.insert("author_local".into(), serde_json::Value::String("[local]".into()));
           ts.insert("commit_local".into(), serde_json::Value::String("[local]".into()));
         }
-        if let Some(pr) = obj.get_mut("patch_ref").and_then(|p| p.as_object_mut()) {
-          pr.insert("git_show_cmd".into(), serde_json::Value::String("[git-show]".into()));
+        if let Some(pr) = obj.get_mut("patch_references").and_then(|p| p.as_object_mut()) {
+          if let Some(cmd) = pr.get("git_show_cmd").and_then(|v| v.as_str()) {
+            let prefix = "git show --patch --format= --no-color ";
+            let redacted = if cmd.starts_with(prefix) {
+              format!("{}[git-sha]", prefix)
+            } else {
+              "[git-show]".to_string()
+            };
+            pr.insert("git_show_cmd".into(), serde_json::Value::String(redacted));
+          }
         }
       }
     }

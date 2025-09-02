@@ -331,6 +331,7 @@ mod tests {
   use serial_test::serial;
 
   #[test]
+  #[serial]
   fn parse_origin_none_without_remote() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
@@ -344,6 +345,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn parse_origin_github_detects_owner_repo() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
@@ -521,6 +523,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn parse_origin_rejects_non_github_hosts() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
@@ -536,6 +539,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn parse_origin_https_dot_git() {
     let td = tempfile::TempDir::new().unwrap();
     let repo = td.path();
@@ -666,6 +670,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn list_pulls_for_commit_json_direct_env_array() {
     std::env::set_var(
       "GAR_TEST_PR_JSON",
@@ -681,6 +686,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn list_pulls_for_commit_json_invalid_env_is_none() {
     std::env::set_var("GAR_TEST_PR_JSON", "not json");
     let v = list_pulls_for_commit_json("o", "r", "s", "t");
@@ -689,6 +695,7 @@ mod tests {
   }
 
   #[test]
+  #[serial]
   fn invalid_env_yields_none_or_empty() {
     std::env::set_var("GAR_TEST_PULL_DETAILS_JSON", "not json");
     assert!(get_pull_details("o", "r", 1, "t").is_none());
