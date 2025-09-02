@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/git-activity-report.commit.schema.json",
-  "title": "Git Activity Report \u2014 Commit Shard ",
+  "title": "Git Activity Report — Commit Shard",
   "type": "object",
   "required": [
     "sha",
@@ -14,277 +14,144 @@
     "body",
     "files",
     "diffstat_text",
-    "patch_ref"
+    "patch_references"
   ],
   "properties": {
-    "sha": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
-    },
-    "short_sha": {
-      "type": "string",
-      "minLength": 7,
-      "maxLength": 20
-    },
-    "parents": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "short_sha": { "type": "string", "minLength": 7, "maxLength": 20 },
+    "parents": { "type": "array", "items": { "type": "string" } },
     "author": {
       "type": "object",
-      "required": [
-        "name",
-        "email",
-        "date"
-      ],
+      "required": ["name", "email", "date"],
       "properties": {
-        "name": {
-          "type": "string"
-        },
-        "email": {
-          "type": "string"
-        },
-        "date": {
-          "type": "string"
-        }
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "date": { "type": "string" }
       },
       "additionalProperties": false
     },
     "committer": {
       "type": "object",
-      "required": [
-        "name",
-        "email",
-        "date"
-      ],
+      "required": ["name", "email", "date"],
       "properties": {
-        "name": {
-          "type": "string"
-        },
-        "email": {
-          "type": "string"
-        },
-        "date": {
-          "type": "string"
-        }
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "date": { "type": "string" }
       },
       "additionalProperties": false
     },
     "timestamps": {
       "type": "object",
-      "required": [
-        "author",
-        "commit",
-        "author_local",
-        "commit_local",
-        "timezone"
-      ],
+      "required": ["author", "commit", "author_local", "commit_local", "timezone"],
       "properties": {
-        "author": {
-          "type": "integer"
-        },
-        "commit": {
-          "type": "integer"
-        },
-        "author_local": {
-          "type": "string"
-        },
-        "commit_local": {
-          "type": "string"
-        },
-        "timezone": {
-          "type": "string",
-          "enum": [
-            "local",
-            "utc"
-          ]
-        }
+        "author": { "type": "integer" },
+        "commit": { "type": "integer" },
+        "author_local": { "type": "string" },
+        "commit_local": { "type": "string" },
+        "timezone": { "type": "string" }
       },
       "additionalProperties": false
     },
-    "subject": {
-      "type": "string"
-    },
-    "body": {
-      "type": "string"
-    },
+    "subject": { "type": "string" },
+    "body": { "type": "string" },
+    "body_lines": { "type": ["array", "null"], "items": { "type": "string" } },
     "files": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": [
-          "file",
-          "status"
-        ],
+        "required": ["file", "status"],
         "properties": {
-          "file": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "old_path": {
-            "type": "string"
-          },
-          "additions": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "deletions": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
+          "file": { "type": "string" },
+          "status": { "type": "string" },
+          "old_path": { "type": ["string", "null"] },
+          "additions": { "type": ["integer", "null"] },
+          "deletions": { "type": ["integer", "null"] }
         },
         "additionalProperties": false
       }
     },
-    "diffstat_text": {
-      "type": "string"
-    },
-    "patch": {
-      "type": "string"
-    },
-    "patch_clipped": {
-      "type": "boolean"
-    },
-    "patch_ref": {
+    "diffstat_text": { "type": "string" },
+    "patch_lines": { "type": ["array", "null"], "items": { "type": "string" } },
+    "patch_clipped": { "type": ["boolean", "null"] },
+    "patch_references": {
       "type": "object",
-      "required": [
-        "embed",
-        "git_show_cmd"
-      ],
+      "required": ["embed", "git_show_cmd"],
       "properties": {
-        "embed": {
-          "type": "boolean"
-        },
-        "git_show_cmd": {
-          "type": "string"
-        },
-        "local_patch_file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "github_diff_url": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "github_patch_url": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "embed": { "type": "boolean" },
+        "git_show_cmd": { "type": "string" },
+        "local_patch_file": { "type": ["string", "null"] },
+        "github": {
+          "type": "object",
+          "properties": {
+            "commit_url": { "type": ["string", "null"] },
+            "diff_url": { "type": ["string", "null"] },
+            "patch_url": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
     },
-    "github_prs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "number",
-          "title",
-          "state",
-          "html_url"
-        ],
-        "properties": {
-          "number": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "merged_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "html_url": {
-            "type": "string"
-          },
-          "diff_url": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "patch_url": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "user": {
+    "github": {
+      "type": "object",
+      "properties": {
+        "pull_requests": {
+          "type": "array",
+          "items": {
             "type": "object",
+            "required": ["number", "title", "state", "html_url"],
             "properties": {
-              "login": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "state": { "type": "string" },
+              "created_at": { "type": ["string", "null"] },
+              "merged_at": { "type": ["string", "null"] },
+              "closed_at": { "type": ["string", "null"] },
+              "html_url": { "type": "string" },
+              "diff_url": { "type": ["string", "null"] },
+              "patch_url": { "type": ["string", "null"] },
+              "submitter": {
+                "type": "object",
+                "properties": {
+                  "login": { "type": ["string", "null"] },
+                  "profile_url": { "type": ["string", "null"] },
+                  "type": { "type": ["string", "null"] },
+                  "email": { "type": ["string", "null"] }
+                },
+                "additionalProperties": false
+              },
+              "approver": {
+                "type": "object",
+                "properties": {
+                  "login": { "type": ["string", "null"] },
+                  "profile_url": { "type": ["string", "null"] },
+                  "type": { "type": ["string", "null"] },
+                  "email": { "type": ["string", "null"] }
+                },
+                "additionalProperties": false
+              },
+              "reviewers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "login": { "type": ["string", "null"] },
+                    "profile_url": { "type": ["string", "null"] },
+                    "type": { "type": ["string", "null"] },
+                    "email": { "type": ["string", "null"] }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "head": { "type": ["string", "null"] },
+              "base": { "type": ["string", "null"] },
+              "body_lines": { "type": ["array", "null"], "items": { "type": "string" } }
             },
             "additionalProperties": true
-          },
-          "submitter": {
-            "type": "object",
-            "properties": {
-              "login": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "additionalProperties": true
-          },
-          "approver": {
-            "type": "object",
-            "properties": {
-              "login": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "additionalProperties": true
-          },
-          "head": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "base": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
-        },
-        "additionalProperties": true
-      }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": true

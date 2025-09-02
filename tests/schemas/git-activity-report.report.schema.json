@@ -2,44 +2,51 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/git-activity-report.report.schema.json",
   "title": "Git Activity Report (unified report)",
-  "description": "Unified report shape. When split-apart, this report also includes an 'items' index of per-commit files.",
+  "description": "Unified report shape with structured summary and optional split-apart index.",
   "type": "object",
-  "required": [
-    "repo",
-    "range",
-    "include_merges",
-    "include_patch",
-    "count",
-    "authors",
-    "summary",
-    "commits"
-  ],
+  "required": ["summary", "authors", "commits"],
   "properties": {
-    "repo": { "type": "string" },
-    "range": {
+    "summary": {
       "type": "object",
-      "required": ["since", "until"],
+      "required": ["repo", "range", "count", "report_options", "changeset"],
       "properties": {
-        "since": { "type": "string" },
-        "until": { "type": "string" }
+        "repo": { "type": "string" },
+        "range": {
+          "type": "object",
+          "required": ["label", "start", "end"],
+          "properties": {
+            "label": { "type": "string" },
+            "start": { "type": "string" },
+            "end": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "count": { "type": "integer", "minimum": 0 },
+        "report_options": {
+          "type": "object",
+          "required": ["include_merges", "include_patch", "include_unmerged", "tz"],
+          "properties": {
+            "include_merges": { "type": "boolean" },
+            "include_patch": { "type": "boolean" },
+            "include_unmerged": { "type": "boolean" },
+            "tz": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "changeset": {
+          "type": "object",
+          "required": ["additions", "deletions", "files_touched"],
+          "properties": {
+            "additions": { "type": "integer", "minimum": 0 },
+            "deletions": { "type": "integer", "minimum": 0 },
+            "files_touched": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
-    "include_merges": { "type": "boolean" },
-    "include_patch": { "type": "boolean" },
-    "include_unmerged": { "type": ["boolean", "null"] },
-    "count": { "type": "integer", "minimum": 0 },
     "authors": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
-    "summary": {
-      "type": "object",
-      "required": ["additions", "deletions", "files_touched"],
-      "properties": {
-        "additions": { "type": "integer", "minimum": 0 },
-        "deletions": { "type": "integer", "minimum": 0 },
-        "files_touched": { "type": "integer", "minimum": 0 }
-      },
-      "additionalProperties": true
-    },
     "unmerged_activity": {
       "type": "object",
       "required": ["branches_scanned", "branches", "total_unmerged_commits"],
@@ -100,7 +107,7 @@
         "commit": { "type": "integer" },
         "author_local": { "type": "string" },
         "commit_local": { "type": "string" },
-        "timezone": { "type": "string", "enum": ["local", "utc"] }
+        "timezone": { "type": "string" }
       },
       "additionalProperties": false
     },
@@ -116,15 +123,32 @@
       },
       "additionalProperties": false
     },
-    "patchRef": {
+    "patchReferences": {
       "type": "object",
       "required": ["embed", "git_show_cmd"],
       "properties": {
         "embed": { "type": "boolean" },
         "git_show_cmd": { "type": "string" },
         "local_patch_file": { "type": ["string", "null"] },
-        "github_diff_url": { "type": ["string", "null"] },
-        "github_patch_url": { "type": ["string", "null"] }
+        "github": {
+          "type": "object",
+          "properties": {
+            "commit_url": { "type": ["string", "null"] },
+            "diff_url": { "type": ["string", "null"] },
+            "patch_url": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "githubUser": {
+      "type": "object",
+      "properties": {
+        "login": { "type": ["string", "null"] },
+        "profile_url": { "type": ["string", "null"] },
+        "type": { "type": ["string", "null"] },
+        "email": { "type": ["string", "null"] }
       },
       "additionalProperties": false
     },
@@ -137,20 +161,29 @@
         "state": { "type": "string" },
         "created_at": { "type": ["string", "null"] },
         "merged_at": { "type": ["string", "null"] },
+        "closed_at": { "type": ["string", "null"] },
         "html_url": { "type": "string" },
         "diff_url": { "type": ["string", "null"] },
         "patch_url": { "type": ["string", "null"] },
-        "user": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
-        "submitter": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
-        "approver": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
+        "submitter": { "$ref": "#/$defs/githubUser" },
+        "approver": { "$ref": "#/$defs/githubUser" },
+        "reviewers": { "type": "array", "items": { "$ref": "#/$defs/githubUser" } },
         "head": { "type": ["string", "null"] },
-        "base": { "type": ["string", "null"] }
+        "base": { "type": ["string", "null"] },
+        "body_lines": { "type": ["array", "null"], "items": { "type": "string" } }
       },
       "additionalProperties": true
     },
+    "commitGithub": {
+      "type": "object",
+      "properties": {
+        "pull_requests": { "type": "array", "items": { "$ref": "#/$defs/githubPR" } }
+      },
+      "additionalProperties": false
+    },
     "commit": {
       "type": "object",
-      "required": ["sha", "short_sha", "parents", "author", "committer", "timestamps", "subject", "body", "files", "diffstat_text", "patch_ref"],
+      "required": ["sha", "short_sha", "parents", "author", "committer", "timestamps", "subject", "body", "files", "diffstat_text", "patch_references"],
       "properties": {
         "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "short_sha": { "type": "string", "minLength": 7, "maxLength": 20 },
@@ -160,12 +193,13 @@
         "timestamps": { "$ref": "#/$defs/timestamps" },
         "subject": { "type": "string" },
         "body": { "type": "string" },
+        "body_lines": { "type": ["array", "null"], "items": { "type": "string" } },
         "files": { "type": "array", "items": { "$ref": "#/$defs/fileEntry" } },
         "diffstat_text": { "type": "string" },
-        "patch": { "type": "string" },
-        "patch_clipped": { "type": "boolean" },
-        "patch_ref": { "$ref": "#/$defs/patchRef" },
-        "github_prs": { "type": "array", "items": { "$ref": "#/$defs/githubPR" } }
+        "patch_lines": { "type": ["array", "null"], "items": { "type": "string" } },
+        "patch_clipped": { "type": ["boolean", "null"] },
+        "patch_references": { "$ref": "#/$defs/patchReferences" },
+        "github": { "$ref": "#/$defs/commitGithub" }
       },
       "additionalProperties": true
     }
