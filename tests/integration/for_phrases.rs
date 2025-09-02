@@ -92,8 +92,8 @@ fn many_for_phrases_should_match_expected_ranges() {
 
     assert!(out.status.success(), "phrase failed: {}", p);
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    let since = v["range"]["since"].as_str().unwrap().to_string();
-    let until = v["range"]["until"].as_str().unwrap().to_string();
+    let since = v["summary"]["range"]["start"].as_str().unwrap().to_string();
+    let until = v["summary"]["range"]["end"].as_str().unwrap().to_string();
 
     // Compute expected
     let (exp_since, exp_until) = if p == "last week" {

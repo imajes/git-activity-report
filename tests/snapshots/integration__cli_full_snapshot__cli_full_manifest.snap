@@ -1,6 +1,7 @@
 ---
 source: tests/integration/cli_full_snapshot.rs
-assertion_line: 62
+assertion_line: 39
+expression: "cli_full_manifest"
 ---
 {
   "generated_at": "[generated]",
@@ -12,16 +13,16 @@ assertion_line: 62
       "file": "report-2025-07.json",
       "label": "2025-07",
       "range": {
-        "since": "2025-07-01T00:00:00",
-        "until": "2025-08-01T00:00:00"
+        "end": "2025-08-01T00:00:00",
+        "start": "2025-07-01T00:00:00"
       }
     },
     {
       "file": "report-2025-08.json",
       "label": "2025-08",
       "range": {
-        "since": "2025-08-01T00:00:00",
-        "until": "2025-09-01T00:00:00"
+        "end": "2025-09-01T00:00:00",
+        "start": "2025-08-01T00:00:00"
       }
     }
   ],

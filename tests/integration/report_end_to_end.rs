@@ -16,19 +16,19 @@ fn simple_mode_outputs_expected_shape() {
   let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   assert!(v["commits"].is_array());
 
-  let since = v["range"]["since"].as_str().unwrap();
-  let until = v["range"]["until"].as_str().unwrap();
+  let since = v["summary"]["range"]["start"].as_str().unwrap();
+  let until = v["summary"]["range"]["end"].as_str().unwrap();
   assert!(since.starts_with("2025-08-01"));
   assert!(until.starts_with("2025-09-01"));
 
-  assert!(v["count"].as_i64().unwrap() >= 1);
+  assert!(v["summary"]["count"].as_i64().unwrap() >= 1);
 
   // Ensure timestamps block present in first commit
   let commits = v["commits"].as_array().unwrap();
 
   if let Some(first) = commits.first() {
     assert!(first["timestamps"]["author"].is_number());
-    assert!(first["patch_ref"]["git_show_cmd"].is_string());
+    assert!(first["patch_references"]["git_show_cmd"].is_string());
   }
 }
 
@@ -60,21 +60,21 @@ fn simple_mode_writes_to_file_and_validates_shape() {
   let data = std::fs::read(&outfile).unwrap();
   let v: serde_json::Value = serde_json::from_slice(&data).unwrap();
 
-  // Top-level shape
-  assert!(v["repo"].as_str().is_some());
-  assert!(v["include_merges"].as_bool().is_some());
-  assert!(v["include_patch"].as_bool().is_some());
-  assert!(v["count"].as_u64().unwrap() >= 1);
+  // Top-level shape (under summary)
+  assert!(v["summary"]["repo"].as_str().is_some());
+  assert!(v["summary"]["report_options"]["include_merges"].as_bool().is_some());
+  assert!(v["summary"]["report_options"]["include_patch"].as_bool().is_some());
+  assert!(v["summary"]["count"].as_u64().unwrap() >= 1);
 
-  let range = &v["range"];
-  assert!(range["since"].as_str().unwrap().starts_with("2025-08-01"));
-  assert!(range["until"].as_str().unwrap().starts_with("2025-09-01"));
+  let range = &v["summary"]["range"];
+  assert!(range["start"].as_str().unwrap().starts_with("2025-08-01"));
+  assert!(range["end"].as_str().unwrap().starts_with("2025-09-01"));
 
   let authors = &v["authors"];
   assert!(authors.is_object());
   assert!(!authors.as_object().unwrap().is_empty());
 
-  let summary = &v["summary"];
+  let summary = &v["summary"]["changeset"];
   assert!(summary["additions"].as_i64().is_some());
   assert!(summary["deletions"].as_i64().is_some());
   assert!(summary["files_touched"].as_u64().is_some());
@@ -107,7 +107,7 @@ fn simple_mode_writes_to_file_and_validates_shape() {
     assert!(f0.get("deletions").is_some());
   }
   assert!(c0["diffstat_text"].as_str().is_some());
-  let pr = &c0["patch_ref"];
+  let pr = &c0["patch_references"];
   assert_eq!(pr["embed"].as_bool().unwrap(), false);
   assert!(pr["git_show_cmd"].as_str().unwrap().starts_with("git show"));
   // patch fields are absent when not embedding

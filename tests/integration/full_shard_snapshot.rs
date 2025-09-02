@@ -66,8 +66,16 @@ fn snapshot_first_shard_commit() {
     ts.insert("author_local".into(), serde_json::Value::String("[local]".into()));
     ts.insert("commit_local".into(), serde_json::Value::String("[local]".into()));
   }
-  if let Some(pr) = v.get_mut("patch_ref").and_then(|o| o.as_object_mut()) {
-    pr.insert("git_show_cmd".into(), serde_json::Value::String("[git-show]".into()));
+  if let Some(pr) = v.get_mut("patch_references").and_then(|o| o.as_object_mut()) {
+    if let Some(cmd) = pr.get("git_show_cmd").and_then(|v| v.as_str()) {
+      let prefix = "git show --patch --format= --no-color ";
+      let redacted = if cmd.starts_with(prefix) {
+        format!("{}[git-sha]", prefix)
+      } else {
+        "[git-show]".to_string()
+      };
+      pr.insert("git_show_cmd".into(), serde_json::Value::String(redacted));
+    }
   }
 
   insta::assert_json_snapshot!(v);

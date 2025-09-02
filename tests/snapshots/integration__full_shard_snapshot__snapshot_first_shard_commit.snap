@@ -1,6 +1,5 @@
 ---
 source: tests/integration/full_shard_snapshot.rs
-assertion_line: 72
 ---
 {
   "author": {
@@ -24,12 +23,9 @@ assertion_line: 72
     }
   ],
   "parents": [],
-  "patch_ref": {
+  "patch_references": {
     "embed": false,
-    "git_show_cmd": "[git-show]",
-    "github_diff_url": null,
-    "github_patch_url": null,
-    "local_patch_file": null
+    "git_show_cmd": "git show --patch --format= --no-color [git-sha]"
   },
   "sha": "[sha]",
   "short_sha": "[short]",

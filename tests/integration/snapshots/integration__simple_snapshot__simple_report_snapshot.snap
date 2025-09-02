@@ -1,6 +1,6 @@
 ---
 source: tests/integration/simple_snapshot.rs
-assertion_line: 62
+assertion_line: 73
 expression: v
 ---
 {
@@ -30,12 +30,9 @@ expression: v
         }
       ],
       "parents": [],
-      "patch_ref": {
+      "patch_references": {
         "embed": false,
-        "git_show_cmd": "[git-show]",
-        "github_diff_url": null,
-        "github_patch_url": null,
-        "local_patch_file": null
+        "git_show_cmd": "git show --patch --format= --no-color [git-sha]"
       },
       "sha": "[sha]",
       "short_sha": "[short]",
@@ -78,12 +75,9 @@ expression: v
       "parents": [
         "[sha]"
       ],
-      "patch_ref": {
+      "patch_references": {
         "embed": false,
-        "git_show_cmd": "[git-show]",
-        "github_diff_url": null,
-        "github_patch_url": null,
-        "local_patch_file": null
+        "git_show_cmd": "git show --patch --format= --no-color [git-sha]"
       },
       "sha": "[sha]",
       "short_sha": "[short]",
@@ -97,17 +91,25 @@ expression: v
       }
     }
   ],
-  "count": 2,
-  "include_merges": true,
-  "include_patch": false,
-  "range": {
-    "since": "2025-08-01",
-    "until": "2025-09-01"
-  },
   "repo": "<repo>",
   "summary": {
-    "additions": 3,
-    "deletions": 0,
-    "files_touched": 3
+    "changeset": {
+      "additions": 3,
+      "deletions": 0,
+      "files_touched": 3
+    },
+    "count": 2,
+    "range": {
+      "end": "2025-09-01",
+      "label": "window",
+      "start": "2025-08-01"
+    },
+    "repo": "<repo>",
+    "report_options": {
+      "include_merges": true,
+      "include_patch": false,
+      "include_unmerged": false,
+      "tz": "utc"
+    }
   }
 }

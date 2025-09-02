@@ -1,5 +1,6 @@
 ---
-source: tests/integration/full_manifest_snapshot.rs
+source: tests/integration/cli_full_snapshot.rs
+expression: v
 ---
 {
   "generated_at": "[generated]",
