@@ -247,9 +247,10 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
 
   for pr_json in arr {
     let html = pr_json.fetch("html_url").to_or_default::<String>();
-    let user_login = pr_json.fetch("user.login").to::<String>();
-    let user = user_login.map(|login| GithubUser { login: Some(login) });
-    let submitter = user.clone();
+    let submitter = pr_json
+      .fetch("user.login")
+      .to::<String>()
+      .map(|login| GithubUser { login: Some(login.clone()), profile_url: Some(format!("https://github.com/{}", login)), r#type: None, email: None });
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -257,7 +258,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       number: pr_json.fetch("number").to::<i64>().unwrap_or(0),
       title: pr_json.fetch("title").to_or_default::<String>(),
       state: pr_json.fetch("state").to_or_default::<String>(),
-      body: pr_json.fetch("body").to::<String>(),
+      body_lines: pr_json.fetch("body").to::<String>().map(|b| b.lines().map(|s| s.to_string()).collect()),
       created_at: pr_json.fetch("created_at").to::<String>(),
       merged_at: pr_json.fetch("merged_at").to::<String>(),
       closed_at: pr_json.fetch("closed_at").to::<String>(),
@@ -272,9 +273,9 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       } else {
         Some(format!("{}.patch", html))
       },
-      user,
       submitter,
       approver: None,
+      reviewers: None,
       head,
       base,
       commits: None,

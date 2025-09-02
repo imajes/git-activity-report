@@ -48,17 +48,11 @@ mod tests {
       body: "".into(),
       files: vec![],
       diffstat_text: "".into(),
-      patch_ref: crate::model::PatchRef {
-        embed: false,
-        git_show_cmd: "".into(),
-        local_patch_file: None,
-        github_diff_url: None,
-        github_patch_url: None,
-      },
-      patch: None,
+      patch_references: crate::model::PatchReferences { embed: false, git_show_cmd: "".into(), local_patch_file: None, github: None },
       patch_clipped: None,
-      github_prs: None,
+      patch_lines: None,
       body_lines: None,
+      github: None,
     }
   }
 
@@ -66,7 +60,7 @@ mod tests {
   fn coordinator_noop_when_flag_disabled() {
     let mut c = minimal_commit();
     apply_commit_enrichments(&mut c, ".", false);
-    assert!(c.github_prs.is_none());
+    assert!(c.github.is_none());
   }
 
   #[test]
