@@ -72,10 +72,14 @@ fn get_json(url: &str, token: &str) -> Option<serde_json::Value> {
 }
 
 // --- Trait seam for GitHub API ---
+#[allow(dead_code)]
 pub trait GithubApi {
   fn list_pulls_for_commit_json(&self, owner: &str, name: &str, sha: &str) -> Option<serde_json::Value>;
+  #[allow(dead_code)]
   fn get_pull_details_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
+  #[allow(dead_code)]
   fn list_commits_in_pull(&self, owner: &str, name: &str, number: i64) -> Vec<PullRequestCommit>;
+  #[allow(dead_code)]
   fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
 }
 
@@ -90,18 +94,12 @@ impl GithubHttpApi {
 
 impl GithubApi for GithubHttpApi {
   fn list_pulls_for_commit_json(&self, owner: &str, name: &str, sha: &str) -> Option<serde_json::Value> {
-    let url = format!(
-      "https://api.github.com/repos/{}/{}/commits/{}/pulls",
-      owner, name, sha
-    );
+    let url = format!("https://api.github.com/repos/{}/{}/commits/{}/pulls", owner, name, sha);
     get_json(&url, &self.token)
   }
 
   fn get_pull_details_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
-    let url = format!(
-      "https://api.github.com/repos/{}/{}/pulls/{}",
-      owner, name, number
-    );
+    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, name, number);
     get_json(&url, &self.token)
   }
 
@@ -111,7 +109,9 @@ impl GithubApi for GithubHttpApi {
       owner, name, number
     );
 
-    let Some(v) = get_json(&url, &self.token) else { return Vec::new() };
+    let Some(v) = get_json(&url, &self.token) else {
+      return Vec::new();
+    };
     let Some(arr) = v.as_array() else { return Vec::new() };
 
     let mut out = Vec::with_capacity(arr.len());
@@ -122,7 +122,11 @@ impl GithubApi for GithubHttpApi {
       let subject = msg.lines().next().unwrap_or("").to_string();
 
       if !sha.is_empty() {
-        out.push(PullRequestCommit { short_sha: sha.chars().take(7).collect(), sha, subject });
+        out.push(PullRequestCommit {
+          short_sha: sha.chars().take(7).collect(),
+          sha,
+          subject,
+        });
       }
     }
 
@@ -157,8 +161,12 @@ impl GithubApi for GithubEnvApi {
   }
 
   fn list_commits_in_pull(&self, _owner: &str, _name: &str, _number: i64) -> Vec<PullRequestCommit> {
-    let Ok(s) = std::env::var("GAR_TEST_PR_COMMITS_JSON") else { return Vec::new() };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { return Vec::new() };
+    let Ok(s) = std::env::var("GAR_TEST_PR_COMMITS_JSON") else {
+      return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+      return Vec::new();
+    };
     let Some(arr) = v.as_array() else { return Vec::new() };
 
     let mut out = Vec::with_capacity(arr.len());
@@ -168,7 +176,11 @@ impl GithubApi for GithubEnvApi {
       let subject = msg.lines().next().unwrap_or("").to_string();
 
       if !sha.is_empty() {
-        out.push(PullRequestCommit { short_sha: sha.chars().take(7).collect(), sha, subject });
+        out.push(PullRequestCommit {
+          short_sha: sha.chars().take(7).collect(),
+          sha,
+          subject,
+        });
       }
     }
 
@@ -203,11 +215,18 @@ fn build_api(token: Option<String>) -> Box<dyn GithubApi> {
 // Public constructors for dependency injection in higher layers/tests.
 #[cfg(any(test, feature = "testutil"))]
 #[allow(dead_code)]
-pub fn make_http_api(token: String) -> Box<dyn GithubApi> { Box::new(GithubHttpApi::new(token)) }
+pub fn make_http_api(token: String) -> Box<dyn GithubApi> {
+  Box::new(GithubHttpApi::new(token))
+}
 #[cfg(any(test, feature = "testutil"))]
 #[allow(dead_code)]
-pub fn make_env_api() -> Box<dyn GithubApi> { Box::new(GithubEnvApi) }
-pub fn make_default_api(token: Option<String>) -> Box<dyn GithubApi> { build_api(token) }
+pub fn make_env_api() -> Box<dyn GithubApi> {
+  Box::new(GithubEnvApi)
+}
+#[cfg(any(test, feature = "testutil"))]
+pub fn make_default_api(token: Option<String>) -> Box<dyn GithubApi> {
+  build_api(token)
+}
 
 #[cfg(any(test, feature = "testutil"))]
 #[allow(dead_code)]
@@ -247,10 +266,12 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
 
   for pr_json in arr {
     let html = pr_json.fetch("html_url").to_or_default::<String>();
-    let submitter = pr_json
-      .fetch("user.login")
-      .to::<String>()
-      .map(|login| GithubUser { login: Some(login.clone()), profile_url: Some(format!("https://github.com/{}", login)), r#type: None, email: None });
+    let submitter = pr_json.fetch("user.login").to::<String>().map(|login| GithubUser {
+      login: Some(login.clone()),
+      profile_url: Some(format!("https://github.com/{}", login)),
+      r#type: None,
+      email: None,
+    });
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -258,7 +279,10 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       number: pr_json.fetch("number").to::<i64>().unwrap_or(0),
       title: pr_json.fetch("title").to_or_default::<String>(),
       state: pr_json.fetch("state").to_or_default::<String>(),
-      body_lines: pr_json.fetch("body").to::<String>().map(|b| b.lines().map(|s| s.to_string()).collect()),
+      body_lines: pr_json
+        .fetch("body")
+        .to::<String>()
+        .map(|b| b.lines().map(|s| s.to_string()).collect()),
       created_at: pr_json.fetch("created_at").to::<String>(),
       merged_at: pr_json.fetch("merged_at").to::<String>(),
       closed_at: pr_json.fetch("closed_at").to::<String>(),
@@ -398,7 +422,7 @@ mod tests {
     assert_eq!(pr.number, 1);
     assert_eq!(pr.title, "Add feature");
     assert_eq!(pr.state, "open");
-    assert_eq!(pr.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
     assert_eq!(pr.head.as_deref(), Some("feature/x"));
     assert_eq!(pr.base.as_deref(), Some("main"));
     assert_eq!(pr.html_url, "https://github.com/openai/example/pull/1");
@@ -598,7 +622,7 @@ mod tests {
     assert_eq!(out2.len(), 1);
     let pr = &out2[0];
     assert!(pr.diff_url.is_none() && pr.patch_url.is_none());
-    assert!(pr.user.is_none());
+    assert!(pr.submitter.is_none());
     assert!(pr.head.is_none());
     assert!(pr.base.is_none());
 

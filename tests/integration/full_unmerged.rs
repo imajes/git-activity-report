@@ -1,5 +1,5 @@
-use test_support;
 use assert_cmd::Command;
+use test_support;
 
 #[test]
 fn full_mode_writes_manifest_and_shards_with_unmerged() {

@@ -16,10 +16,10 @@
 use anyhow::Result;
 use chrono::TimeZone;
 
-use crate::gitio;
-use crate::model::{Commit, FileEntry, PatchReferences, PatchReferencesGithub, Person, Timestamps};
-use crate::util::{iso_in_tz, short_sha, clip_patch};
 use crate::enrichment::github_pull_requests::enrich_with_github_prs;
+use crate::gitio;
+use crate::model::{Commit, FileEntry, PatchReferences, Person, Timestamps};
+use crate::util::{clip_patch, iso_in_tz, short_sha};
 use std::path::Path;
 
 pub struct ProcessContext<'a> {
@@ -85,7 +85,13 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     context.tz.to_string()
   };
 
-  let timestamps = Timestamps { author: meta.at, commit: meta.ct, author_local, commit_local, timezone };
+  let timestamps = Timestamps {
+    author: meta.at,
+    commit: meta.ct,
+    author_local,
+    commit_local,
+    timezone,
+  };
 
   let author = Person {
     name: meta.author_name,
@@ -99,7 +105,12 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     date: meta.committer_date,
   };
 
-  let patch_references = PatchReferences { embed: context.include_patch, git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha), local_patch_file: None, github: None };
+  let patch_references = PatchReferences {
+    embed: context.include_patch,
+    git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha),
+    local_patch_file: None,
+    github: None,
+  };
 
   let commit = Commit {
     sha: meta.sha.clone(),

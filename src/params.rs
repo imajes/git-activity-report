@@ -14,7 +14,6 @@
 
 use crate::cli::EffectiveConfig;
 use crate::render::ReportParams;
- 
 
 pub fn build_report_params(cfg: &EffectiveConfig, since: String, until: String) -> ReportParams {
   let label = match &cfg.window {

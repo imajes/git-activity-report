@@ -1,7 +1,7 @@
-use test_support;
 use assert_cmd::Command;
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use regex::Regex;
+use test_support;
 
 fn iso(dt: chrono::DateTime<Local>) -> String {
   dt.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string()

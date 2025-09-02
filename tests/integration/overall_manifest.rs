@@ -1,6 +1,6 @@
-use test_support;
 use assert_cmd::Command;
 use jsonschema::validator_for;
+use test_support;
 
 fn compile_overall_schema() -> jsonschema::Validator {
   let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));

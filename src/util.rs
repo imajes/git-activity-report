@@ -108,7 +108,7 @@ pub fn effective_now(override_now: Option<DateTime<Local>>) -> DateTime<Local> {
 ///
 /// - When `out` is not "-", it is treated as the target directory; it will be created if needed.
 /// - When `out` is "-", a temp directory is created with a timestamped name.
-/// Returns the absolute path as a String.
+///   Returns the absolute path as a String.
 pub fn prepare_out_dir(out: &str, now_opt: Option<DateTime<Local>>) -> anyhow::Result<String> {
   let dir = if out != "-" {
     out.to_string()
@@ -138,8 +138,8 @@ pub fn render_man_page<T: CommandFactory>() -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use clap::Parser;
   use chrono::{Local, TimeZone};
+  use clap::Parser;
 
   #[test]
   fn short_sha_truncates() {
@@ -193,10 +193,7 @@ mod tests {
 
   #[test]
   fn prepare_out_dir_temp_includes_timestamp() {
-    let fixed = Local
-      .with_ymd_and_hms(2025, 8, 15, 12, 0, 0)
-      .single()
-      .unwrap();
+    let fixed = Local.with_ymd_and_hms(2025, 8, 15, 12, 0, 0).single().unwrap();
     let dir = prepare_out_dir("-", Some(fixed)).expect("prepare_out_dir temp");
     assert!(dir.contains("activity-20250815-120000"), "dir was: {}", dir);
     assert!(std::path::Path::new(&dir).exists());
@@ -235,6 +232,11 @@ pub fn format_shard_name(epoch: i64, short_sha: &str, tz: &str) -> String {
     let dt = zone.from_utc_datetime(&dt_utc.naive_utc());
     format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)
   } else {
-    format!("{}-{}-{}.json", dt_utc.format("%Y.%m.%d"), dt_utc.format("%H.%M"), short_sha)
+    format!(
+      "{}-{}-{}.json",
+      dt_utc.format("%Y.%m.%d"),
+      dt_utc.format("%H.%M"),
+      short_sha
+    )
   }
 }

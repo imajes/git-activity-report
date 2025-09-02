@@ -1,5 +1,5 @@
-use test_support;
 use assert_cmd::Command;
+use test_support;
 
 #[test]
 fn simple_patch_clipping_sets_flag() {

@@ -16,7 +16,7 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Datelike, Local, NaiveDate, Timelike};
 use chrono_english::{Interval, parse_duration};
- 
+
 use serde::{Deserialize, Serialize};
 use two_timer::parse as parse_natural;
 

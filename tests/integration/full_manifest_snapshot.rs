@@ -33,7 +33,9 @@ fn full_manifest_snapshot() {
 
   let top: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let dir = top.get("dir").unwrap().as_str().unwrap();
-  let pointer = top.get("manifest").and_then(|v| v.as_str())
+  let pointer = top
+    .get("manifest")
+    .and_then(|v| v.as_str())
     .or_else(|| top.get("file").and_then(|v| v.as_str()))
     .expect("pointer file or manifest");
   let path = std::path::Path::new(dir).join(pointer);
