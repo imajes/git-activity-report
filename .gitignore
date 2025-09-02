@@ -27,3 +27,4 @@ __pycache__/
 node_modules/
 real-output
 scratch
+/prompt-engineering

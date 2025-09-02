@@ -23,7 +23,7 @@ Risk/Impact
 
 Checklist
 
-- [ ] Docs updated (@README.md + @docs/NEXT_STEPS.md as needed)
+- [ ] Docs updated (@README.md + @prompt-engineering/NEXT_STEPS.md as needed)
 - [ ] Schema changes covered by tests/snapshots (if applicable)
 - [ ] Tests updated/passing (>=90% where applicable)
 - [ ] Clippy/rustfmt clean
