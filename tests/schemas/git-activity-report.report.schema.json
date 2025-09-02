@@ -36,7 +36,8 @@
       "properties": {
         "additions": { "type": "integer", "minimum": 0 },
         "deletions": { "type": "integer", "minimum": 0 },
-        "files_touched": { "type": "integer", "minimum": 0 }
+        "files_touched": { "type": "integer", "minimum": 0 },
+        "estimated_minutes_total": { "type": ["number", "null"] }
       },
       "additionalProperties": true
     },
@@ -78,7 +79,9 @@
         },
         "additionalProperties": false
       }
-    }
+    },
+    "authors_minutes": { "type": "object", "additionalProperties": { "type": "number" } },
+    "reviewers_minutes": { "type": "object", "additionalProperties": { "type": "number" } }
   },
   "additionalProperties": false,
   "$defs": {
@@ -144,7 +147,13 @@
         "submitter": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
         "approver": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
         "head": { "type": ["string", "null"] },
-        "base": { "type": ["string", "null"] }
+        "base": { "type": ["string", "null"] },
+        "estimated_minutes": { "type": ["number", "null"] },
+        "estimated_minutes_min": { "type": ["number", "null"] },
+        "estimated_minutes_max": { "type": ["number", "null"] },
+        "estimate_confidence": { "type": ["number", "null"] },
+        "estimate_basis": { "type": ["string", "null"] },
+        "reviewers_minutes_by_github_login": { "type": "object", "additionalProperties": { "type": "number" } }
       },
       "additionalProperties": true
     },

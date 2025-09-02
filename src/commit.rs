@@ -27,6 +27,8 @@ pub struct ProcessContext<'a> {
   pub github_prs: bool,
   pub include_patch: bool,
   pub max_patch_bytes: usize,
+  pub estimate_effort: bool,
+  pub verbose: bool,
 }
 
 /// Builds a vector of `FileEntry` structs for a given commit.
@@ -119,6 +121,11 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     patch_clipped: None,
     github_prs: None,
     body_lines: None,
+    estimated_minutes: None,
+    estimated_minutes_min: None,
+    estimated_minutes_max: None,
+    estimate_confidence: None,
+    estimate_basis: None,
   };
 
   Ok(commit)
@@ -141,6 +148,27 @@ pub fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
 
   if !commit.body.is_empty() {
     commit.body_lines = Some(commit.body.lines().map(String::from).collect());
+  }
+
+  if context.estimate_effort {
+    let weights = crate::enrichment::effort::EffortWeights::default();
+    let est = crate::enrichment::effort::estimate_commit_effort(&commit, weights);
+    commit.estimated_minutes = Some(est.minutes);
+    commit.estimated_minutes_min = Some(est.min_minutes);
+    commit.estimated_minutes_max = Some(est.max_minutes);
+    commit.estimate_confidence = Some(est.confidence as f64);
+    commit.estimate_basis = Some(est.basis.clone());
+    if context.verbose {
+      eprintln!(
+        "[estimate] commit {}: {:.1}m (min {:.1}, max {:.1}, conf {:.2}) basis={}",
+        commit.short_sha,
+        est.minutes,
+        est.min_minutes,
+        est.max_minutes,
+        est.confidence,
+        est.basis
+      );
+    }
   }
 
   Ok(commit)

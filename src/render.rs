@@ -42,6 +42,16 @@ pub struct ReportParams {
   pub save_patches_dir: Option<String>,
   pub github_prs: bool,
   pub now_local: Option<DateTime<Local>>,
+  pub estimate_effort: bool,
+  pub verbose: bool,
+  pub estimate_review_approved_minutes: f64,
+  pub estimate_review_changes_minutes: f64,
+  pub estimate_review_commented_minutes: f64,
+  pub estimate_files_overhead_per_review_minutes: f64,
+  pub estimate_day_drag_minutes: f64,
+  pub estimate_pr_assembly_minutes: f64,
+  pub estimate_approver_only_minutes: f64,
+  pub estimate_cycle_time_cap: f64,
 }
 
 // --- Internal Context for Processing moved to crate::commit ---
@@ -62,14 +72,18 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
+    verbose: params.verbose,
   };
 
   let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
   let mut authors: BTreeMap<String, i64> = BTreeMap::new();
+  let mut authors_minutes: BTreeMap<String, f64> = BTreeMap::new();
   let mut summary = Summary {
     additions: 0,
     deletions: 0,
     files_touched: 0,
+    estimated_minutes_total: if params.estimate_effort { Some(0.0) } else { None },
   };
   let mut files_touched: HashSet<String> = HashSet::new();
 
@@ -90,17 +104,53 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
       files_touched.insert(f.file.clone());
     }
 
+    if params.estimate_effort {
+      if let Some(m) = commit.estimated_minutes {
+        let author_key = format!("{} <{}>", commit.author.name, commit.author.email);
+        *authors_minutes.entry(author_key).or_insert(0.0) += m;
+        if let Some(total) = &mut summary.estimated_minutes_total { *total += m; }
+        if params.verbose {
+          eprintln!("[estimate] add to author total: {} +{:.1}m", commit.author.name, m);
+        }
+      }
+    }
+
     commits.push(commit);
   }
 
   summary.files_touched = files_touched.len();
 
   let pull_requests = if params.github_prs {
-    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
+    let pr_params = crate::enrichment::effort::PrEstimateParams {
+      review_approved_min: params.estimate_review_approved_minutes,
+      review_changes_min: params.estimate_review_changes_minutes,
+      review_commented_min: params.estimate_review_commented_minutes,
+      files_overhead_per_review_min: params.estimate_files_overhead_per_review_minutes,
+      day_drag_min: params.estimate_day_drag_minutes,
+      pr_assembly_min: params.estimate_pr_assembly_minutes,
+      approver_only_min: params.estimate_approver_only_minutes,
+      cycle_time_cap_ratio: params.estimate_cycle_time_cap,
+    };
+    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo, params.estimate_effort, params.verbose, pr_params)
       .or(Some(Vec::new()))
   } else {
     None
   };
+
+  // Aggregate reviewers_minutes across PRs when present
+  let reviewers_minutes = if params.estimate_effort {
+    if let Some(prs) = &pull_requests {
+      let mut map: BTreeMap<String, f64> = BTreeMap::new();
+      for pr in prs {
+        if let Some(m) = &pr.reviewers_minutes_by_github_login {
+          for (login, mins) in m {
+            *map.entry(login.clone()).or_insert(0.0) += *mins;
+          }
+        }
+      }
+      Some(map)
+    } else { None }
+  } else { None };
 
   let report = SimpleReport {
     repo: params.repo.clone(),
@@ -116,6 +166,8 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
     commits,
     pull_requests,
     items: None,
+    authors_minutes: if params.estimate_effort { Some(authors_minutes) } else { None },
+    reviewers_minutes,
   };
 
   Ok(report)
@@ -142,7 +194,7 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
   std::fs::create_dir_all(&subdir)?;
 
   // Process the primary commit range: write shards and collect items/summary/authors
-  let (items, summary, authors) = process_commit_range(params, &subdir, &label)?;
+  let (items, summary, authors, authors_minutes) = process_commit_range(params, &subdir, &label)?;
 
   // Optionally process unmerged branches
   let _unmerged_activity = if params.include_unmerged {
@@ -160,6 +212,8 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
+    verbose: params.verbose,
   };
   let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
   for sha in shas.iter() {
@@ -174,11 +228,36 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
   }
 
   let pull_requests = if params.github_prs {
-    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
+    let pr_params = crate::enrichment::effort::PrEstimateParams {
+      review_approved_min: params.estimate_review_approved_minutes,
+      review_changes_min: params.estimate_review_changes_minutes,
+      review_commented_min: params.estimate_review_commented_minutes,
+      files_overhead_per_review_min: params.estimate_files_overhead_per_review_minutes,
+      day_drag_min: params.estimate_day_drag_minutes,
+      pr_assembly_min: params.estimate_pr_assembly_minutes,
+      approver_only_min: params.estimate_approver_only_minutes,
+      cycle_time_cap_ratio: params.estimate_cycle_time_cap,
+    };
+    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo, params.estimate_effort, params.verbose, pr_params)
       .or(Some(Vec::new()))
   } else {
     None
   };
+
+  // Aggregate reviewers_minutes across PRs when present
+  let reviewers_minutes = if params.estimate_effort {
+    if let Some(prs) = &pull_requests {
+      let mut map: BTreeMap<String, f64> = BTreeMap::new();
+      for pr in prs {
+        if let Some(m) = &pr.reviewers_minutes_by_github_login {
+          for (login, mins) in m {
+            *map.entry(login.clone()).or_insert(0.0) += *mins;
+          }
+        }
+      }
+      Some(map)
+    } else { None }
+  } else { None };
 
   let report = SimpleReport {
     repo: params.repo.clone(),
@@ -194,6 +273,8 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     commits,
     pull_requests,
     items: Some(items),
+    authors_minutes: if params.estimate_effort { Some(authors_minutes) } else { None },
+    reviewers_minutes,
   };
 
   let report_path = Path::new(&base_dir).join(format!("report-{}.json", label));
@@ -209,7 +290,7 @@ fn process_commit_range(
   params: &ReportParams,
   subdir: &Path,
   label: &str,
-) -> Result<(Vec<ManifestItem>, Summary, BTreeMap<String, i64>)> {
+) -> Result<(Vec<ManifestItem>, Summary, BTreeMap<String, i64>, BTreeMap<String, f64>)> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
@@ -217,14 +298,18 @@ fn process_commit_range(
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
+    verbose: params.verbose,
   };
 
   let mut items = Vec::with_capacity(shas.len());
   let mut authors: BTreeMap<String, i64> = BTreeMap::new();
+  let mut authors_minutes: BTreeMap<String, f64> = BTreeMap::new();
   let mut summary = Summary {
     additions: 0,
     deletions: 0,
     files_touched: 0,
+    estimated_minutes_total: if params.estimate_effort { Some(0.0) } else { None },
   };
   let mut files_touched: HashSet<String> = HashSet::new();
 
@@ -254,11 +339,22 @@ fn process_commit_range(
       summary.deletions += f.deletions.unwrap_or(0);
       files_touched.insert(f.file.clone());
     }
+
+    if params.estimate_effort {
+      if let Some(m) = commit.estimated_minutes {
+        let author_key = format!("{} <{}>", commit.author.name, commit.author.email);
+        *authors_minutes.entry(author_key).or_insert(0.0) += m;
+        if let Some(total) = &mut summary.estimated_minutes_total { *total += m; }
+        if params.verbose {
+          eprintln!("[estimate] add to author total: {} +{:.1}m", commit.author.name, m);
+        }
+      }
+    }
   }
 
   summary.files_touched = files_touched.len();
 
-  Ok((items, summary, authors))
+  Ok((items, summary, authors, authors_minutes))
 }
 
 /// Helper for `run_full` to process unmerged branches.
@@ -275,6 +371,8 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
+    verbose: params.verbose,
   };
 
   let mut unmerged_activity = UnmergedActivity {

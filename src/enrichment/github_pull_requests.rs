@@ -95,7 +95,13 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
 
 /// Aggregate and enrich PRs across a commit set into a top-level array.
 /// Best-effort: returns None when origin or token are missing.
-pub fn collect_pull_requests_for_commits(commits: &[Commit], repo: &str) -> Option<Vec<GithubPullRequest>> {
+pub fn collect_pull_requests_for_commits(
+  commits: &[Commit],
+  repo: &str,
+  estimate_effort: bool,
+  verbose: bool,
+  pr_params: crate::enrichment::effort::PrEstimateParams,
+) -> Option<Vec<GithubPullRequest>> {
   // Phase 1: origin + token; early guards with operator messages
   let (owner, name) = match ghapi::parse_origin_github(repo) {
     Some(p) => p,
@@ -116,7 +122,7 @@ pub fn collect_pull_requests_for_commits(commits: &[Commit], repo: &str) -> Opti
   // Phase 2: delegate to injected seam with HTTP backend
   let api = ghapi::make_default_api(Some(token));
 
-  collect_pull_requests_for_commits_with_api(commits, (&owner, &name), api.as_ref())
+  collect_pull_requests_for_commits_with_api(commits, (&owner, &name), api.as_ref(), estimate_effort, verbose, pr_params)
 }
 
 /// Aggregate and enrich PRs using an injected GithubApi (no token/env logic here).
@@ -124,6 +130,9 @@ pub fn collect_pull_requests_for_commits_with_api(
   commits: &[Commit],
   owner_name: (&str, &str),
   api: &dyn GithubApi,
+  estimate_effort: bool,
+  verbose: bool,
+  pr_params: crate::enrichment::effort::PrEstimateParams,
 ) -> Option<Vec<GithubPullRequest>> {
   // Phase 1: early guard
   if commits.is_empty() {
@@ -156,6 +165,7 @@ pub fn collect_pull_requests_for_commits_with_api(
     if let Some(pr_json) = details_json {
       let html_url = pr_json.fetch("html_url").to_or_default::<String>();
       let pr_commits = api.list_commits_in_pull(owner, name, number);
+      let pr_commits_len = pr_commits.len();
 
       let title = pr_json.fetch("title").to_or_default::<String>();
       let state = pr_json.fetch("state").to_or_default::<String>();
@@ -199,7 +209,7 @@ pub fn collect_pull_requests_for_commits_with_api(
       let diff_url = if html_url.is_empty() { None } else { Some(format!("{}.diff", html_url)) };
       let patch_url = if html_url.is_empty() { None } else { Some(format!("{}.patch", html_url)) };
 
-      let pr = GithubPullRequest {
+      let mut pr = GithubPullRequest {
         number,
         title,
         state,
@@ -216,7 +226,61 @@ pub fn collect_pull_requests_for_commits_with_api(
         head,
         base,
         commits: Some(pr_commits),
+        estimated_minutes: None,
+        estimated_minutes_min: None,
+        estimated_minutes_max: None,
+        estimate_confidence: None,
+        estimate_basis: None,
+        reviewers_minutes_by_github_login: None,
       };
+
+      if estimate_effort {
+        // Compute review counts and per-reviewer minutes
+        let mut approved = 0usize;
+        let mut changes = 0usize;
+        let mut commented = 0usize;
+        let mut reviewers_minutes: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
+        if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
+          if let Some(arr) = reviews_json.as_array() {
+            for (idx, r) in arr.iter().enumerate() {
+              let state = r.fetch("state").to_or_default::<String>().to_uppercase();
+              let login = r.fetch("user.login").to::<String>().unwrap_or_else(|| "unknown".to_string());
+              let mut minutes = 0.0f64;
+              match state.as_str() {
+                "APPROVED" => { approved += 1; minutes += pr_params.review_approved_min; }
+                "CHANGES_REQUESTED" => { changes += 1; minutes += pr_params.review_changes_min; }
+                "COMMENTED" => { commented += 1; minutes += pr_params.review_commented_min; }
+                _ => {}
+              }
+              if idx > 0 {
+                minutes += (pr_commits_len as f64) * pr_params.files_overhead_per_review_min;
+              }
+              if minutes > 0.0 {
+                *reviewers_minutes.entry(login).or_insert(0.0) += minutes;
+              }
+            }
+          }
+        }
+        let rc = crate::enrichment::effort::ReviewCounts { approved, changes_requested: changes, commented };
+
+        let weights = crate::enrichment::effort::EffortWeights::default();
+        let est = crate::enrichment::effort::estimate_pr_effort(&pr, commits, weights, Some(rc), pr_params);
+        pr.estimated_minutes = Some(est.minutes);
+        pr.estimated_minutes_min = Some(est.min_minutes);
+        pr.estimated_minutes_max = Some(est.max_minutes);
+        pr.estimate_confidence = Some(est.confidence as f64);
+        pr.estimate_basis = Some(est.basis.clone());
+        if !reviewers_minutes.is_empty() { pr.reviewers_minutes_by_github_login = Some(reviewers_minutes.clone()); }
+        if verbose {
+          eprintln!(
+            "[estimate] PR #{}: {:.1}m (min {:.1}, max {:.1}, conf {:.2}) basis={}",
+            pr.number, est.minutes, est.min_minutes, est.max_minutes, est.confidence, est.basis
+          );
+          for (login, mins) in reviewers_minutes.iter() {
+            eprintln!("[estimate] PR #{} reviewer {}: +{:.1}m", pr.number, login, mins);
+          }
+        }
+      }
 
       out.push(pr);
     }
@@ -325,7 +389,7 @@ mod tests {
     let td = init_git_repo_with_origin();
     let repo = td.path().to_str().unwrap();
     let commits = vec![minimal_commit_with_pr(1)];
-    let out = collect_pull_requests_for_commits(&commits, repo).unwrap();
+    let out = collect_pull_requests_for_commits(&commits, repo, false, false, crate::enrichment::effort::PrEstimateParams { review_approved_min: 9.0, review_changes_min: 6.0, review_commented_min: 4.0, files_overhead_per_review_min: 0.2, day_drag_min: 7.0, pr_assembly_min: 10.0, approver_only_min: 10.0, cycle_time_cap_ratio: 0.5 }).unwrap();
     assert_eq!(out.len(), 1);
     let pr = &out[0];
     assert_eq!(pr.number, 1);
@@ -376,11 +440,60 @@ mod tests {
     let td = init_git_repo_with_origin();
     let repo = td.path().to_str().unwrap();
     let commits = vec![minimal_commit_with_pr(2)];
-    let out = collect_pull_requests_for_commits(&commits, repo).unwrap();
+    let out = collect_pull_requests_for_commits(&commits, repo, false, false, crate::enrichment::effort::PrEstimateParams { review_approved_min: 9.0, review_changes_min: 6.0, review_commented_min: 4.0, files_overhead_per_review_min: 0.2, day_drag_min: 7.0, pr_assembly_min: 10.0, approver_only_min: 10.0, cycle_time_cap_ratio: 0.5 }).unwrap();
     assert_eq!(out.len(), 1);
     let pr = &out[0];
     assert_eq!(pr.approver.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("bob"));
 
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
+    std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
+    std::env::remove_var("GAR_TEST_PR_REVIEWS_JSON");
+  }
+
+  #[test]
+  #[serial]
+  fn aggregates_reviewer_minutes_map() {
+    std::env::set_var("GITHUB_TOKEN", "x");
+    std::env::set_var(
+      "GAR_TEST_PULL_DETAILS_JSON",
+      serde_json::json!({
+        "html_url": "https://github.com/openai/example/pull/3",
+        "number": 3,
+        "title": "Feature",
+        "state": "closed",
+        "user": {"login": "submit"},
+        "head": {"ref": "feature/x"},
+        "base": {"ref": "main"},
+        "created_at": "2024-03-01T00:00:00Z",
+        "closed_at": "2024-03-02T00:00:00Z",
+        "merged_at": "2024-03-02T00:00:00Z"
+      })
+      .to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_COMMITS_JSON",
+      serde_json::json!([{ "sha": "abc1234", "commit": {"message": "Subject\nBody"}}]).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_REVIEWS_JSON",
+      serde_json::json!([
+        {"state": "COMMENTED", "user": {"login": "x"}},
+        {"state": "APPROVED", "user": {"login": "alice"}},
+        {"state": "APPROVED", "user": {"login": "bob"}}
+      ])
+      .to_string(),
+    );
+    let td = init_git_repo_with_origin();
+    let repo = td.path().to_str().unwrap();
+    let commits = vec![minimal_commit_with_pr(3)];
+    let params = crate::enrichment::effort::PrEstimateParams { review_approved_min: 9.0, review_changes_min: 6.0, review_commented_min: 4.0, files_overhead_per_review_min: 0.2, day_drag_min: 7.0, pr_assembly_min: 10.0, approver_only_min: 10.0, cycle_time_cap_ratio: 0.5 };
+    let out = collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), ghapi::make_env_api().as_ref(), true, false, params).unwrap();
+    let pr = &out[0];
+    let map = pr.reviewers_minutes_by_github_login.as_ref().unwrap();
+    assert!((map.get("x").cloned().unwrap_or(0.0) - 4.0).abs() < 0.001);
+    assert!((map.get("alice").cloned().unwrap_or(0.0) - 9.2).abs() < 0.001);
+    assert!((map.get("bob").cloned().unwrap_or(0.0) - 9.2).abs() < 0.001);
     std::env::remove_var("GITHUB_TOKEN");
     std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
     std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
@@ -412,7 +525,7 @@ mod tests {
 
     let commits = vec![minimal_commit_with_pr(1)];
     let api = ghapi::make_env_api();
-    let out = collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), api.as_ref()).unwrap();
+    let out = collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), api.as_ref(), false, false, crate::enrichment::effort::PrEstimateParams { review_approved_min: 9.0, review_changes_min: 6.0, review_commented_min: 4.0, files_overhead_per_review_min: 0.2, day_drag_min: 7.0, pr_assembly_min: 10.0, approver_only_min: 10.0, cycle_time_cap_ratio: 0.5 }).unwrap();
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].html_url, "https://github.com/openai/example/pull/1");
 

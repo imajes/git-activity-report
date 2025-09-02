@@ -36,5 +36,15 @@ pub fn build_report_params(cfg: &EffectiveConfig, since: String, until: String) 
     save_patches_dir: cfg.save_patches.clone(),
     github_prs: cfg.github_prs,
     now_local: None,
+    estimate_effort: cfg.estimate_effort,
+    verbose: cfg.verbose,
+    estimate_review_approved_minutes: cfg.estimate_review_approved_minutes,
+    estimate_review_changes_minutes: cfg.estimate_review_changes_minutes,
+    estimate_review_commented_minutes: cfg.estimate_review_commented_minutes,
+    estimate_files_overhead_per_review_minutes: cfg.estimate_files_overhead_per_review_minutes,
+    estimate_day_drag_minutes: cfg.estimate_day_drag_minutes,
+    estimate_pr_assembly_minutes: cfg.estimate_pr_assembly_minutes,
+    estimate_approver_only_minutes: cfg.estimate_approver_only_minutes,
+    estimate_cycle_time_cap: cfg.estimate_cycle_time_cap,
   }
 }
