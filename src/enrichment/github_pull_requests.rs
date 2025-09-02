@@ -15,18 +15,21 @@
 use crate::enrichment::github_api as ghapi;
 use crate::enrichment::github_api::GithubApi;
 use crate::ext::serde_json::JsonFetch;
-use crate::model::{Commit, GithubPullRequest};
+use crate::model::{Commit, CommitGithub, GithubPullRequest, GithubUser, PatchReferencesGithub};
 
 /// Enriches a commit with its associated GitHub Pull Request info (best-effort).
 /// Default path uses repository origin and token discovery.
 pub fn enrich_with_github_prs(commit: &mut Commit, repo: &str) {
-  if let Ok(prs) = ghapi::try_fetch_prs_for_commit(repo, &commit.sha) {
-    if let Some(first_pr) = prs.first() {
-      commit.patch_ref.github_diff_url = first_pr.diff_url.clone();
-      commit.patch_ref.github_patch_url = first_pr.patch_url.clone();
-    }
+  if let Some((owner, name)) = ghapi::parse_origin_github(repo) {
+    let base = format!("https://github.com/{}/{}/commit/{}", owner, name, commit.sha);
+    let gh_urls = PatchReferencesGithub { commit_url: Some(base.clone()), diff_url: Some(format!("{}.diff", base)), patch_url: Some(format!("{}.patch", base)) };
+    commit.patch_references.github = Some(gh_urls);
+  }
 
-    commit.github_prs = Some(prs);
+  if let Ok(prs) = ghapi::try_fetch_prs_for_commit(repo, &commit.sha) {
+    if !prs.is_empty() {
+      commit.github = Some(CommitGithub { pull_requests: prs });
+    }
   }
 }
 
@@ -54,9 +57,10 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
   let mut out: Vec<GithubPullRequest> = Vec::with_capacity(arr.len());
   for pr_json in arr {
     let html_url = pr_json.fetch("html_url").to_or_default::<String>();
-    let user_login = pr_json.fetch("user.login").to::<String>();
-    let user = user_login.map(|login| crate::model::GithubUser { login: Some(login) });
-    let submitter = user.clone();
+    let submitter = pr_json
+      .fetch("user.login")
+      .to::<String>()
+      .map(|login| GithubUser { login: Some(login.clone()), profile_url: Some(format!("https://github.com/{}", login)), r#type: None, email: None });
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -67,16 +71,16 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
       number: pr_json.fetch("number").to::<i64>().unwrap_or(0),
       title: pr_json.fetch("title").to_or_default::<String>(),
       state: pr_json.fetch("state").to_or_default::<String>(),
-      body: pr_json.fetch("body").to::<String>(),
+      body_lines: pr_json.fetch("body").to::<String>().map(|b| b.lines().map(|s| s.to_string()).collect()),
       created_at: pr_json.fetch("created_at").to::<String>(),
       merged_at: pr_json.fetch("merged_at").to::<String>(),
       closed_at: pr_json.fetch("closed_at").to::<String>(),
       html_url,
       diff_url,
       patch_url,
-      user,
       submitter,
       approver: None,
+      reviewers: None,
       head,
       base,
       commits: None,
@@ -85,12 +89,9 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
     out.push(item);
   }
 
-  if let Some(first) = out.first() {
-    commit.patch_ref.github_diff_url = first.diff_url.clone();
-    commit.patch_ref.github_patch_url = first.patch_url.clone();
+  if !out.is_empty() {
+    commit.github = Some(CommitGithub { pull_requests: out });
   }
-
-  commit.github_prs = Some(out);
 }
 
 /// Aggregate and enrich PRs across a commit set into a top-level array.
@@ -134,7 +135,8 @@ pub fn collect_pull_requests_for_commits_with_api(
   use std::collections::BTreeSet;
   let mut pr_numbers: BTreeSet<i64> = BTreeSet::new();
   for commit in commits {
-    if let Some(prs) = &commit.github_prs {
+    if let Some(gh) = &commit.github {
+      let prs = &gh.pull_requests;
       for pr in prs {
         if pr.number > 0 {
           pr_numbers.insert(pr.number);
@@ -162,10 +164,11 @@ pub fn collect_pull_requests_for_commits_with_api(
       let created_at = pr_json.fetch("created_at").to::<String>();
       let merged_at = pr_json.fetch("merged_at").to::<String>();
       let closed_at = pr_json.fetch("closed_at").to::<String>();
-      let body = pr_json.fetch("body").to::<String>();
-      let user_login = pr_json.fetch("user.login").to::<String>();
-      let user = user_login.map(|login| crate::model::GithubUser { login: Some(login) });
-      let submitter = user.clone();
+      let body_lines = pr_json.fetch("body").to::<String>().map(|b| b.lines().map(|s| s.to_string()).collect());
+      let submitter = pr_json
+        .fetch("user.login")
+        .to::<String>()
+        .map(|login| GithubUser { login: Some(login.clone()), profile_url: Some(format!("https://github.com/{}", login)), r#type: None, email: None });
       // Determine approver: prefer latest APPROVED review; fallback to merged_by
       let mut approver = None;
       if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
@@ -185,13 +188,13 @@ pub fn collect_pull_requests_for_commits_with_api(
           }
           if let Some(i) = latest_idx {
             let login = arr[i].fetch("user.login").to::<String>();
-            approver = login.map(|l| crate::model::GithubUser { login: Some(l) });
+            approver = login.map(|l| GithubUser { login: Some(l.clone()), profile_url: Some(format!("https://github.com/{}", l)), r#type: None, email: None });
           }
         }
       }
       if approver.is_none() {
         let merged_by_login = pr_json.fetch("merged_by.login").to::<String>();
-        approver = merged_by_login.map(|login| crate::model::GithubUser { login: Some(login) });
+        approver = merged_by_login.map(|login| GithubUser { login: Some(login.clone()), profile_url: Some(format!("https://github.com/{}", login)), r#type: None, email: None });
       }
       let head = pr_json.fetch("head.ref").to::<String>();
       let base = pr_json.fetch("base.ref").to::<String>();
@@ -203,16 +206,16 @@ pub fn collect_pull_requests_for_commits_with_api(
         number,
         title,
         state,
-        body,
+        body_lines,
         created_at,
         merged_at,
         closed_at,
         html_url,
         diff_url,
         patch_url,
-        user,
         submitter,
         approver,
+        reviewers: None,
         head,
         base,
         commits: Some(pr_commits),
@@ -249,30 +252,30 @@ mod tests {
       body: "".into(),
       files: vec![],
       diffstat_text: "".into(),
-      patch_ref: crate::model::PatchRef { embed: false, git_show_cmd: "".into(), local_patch_file: None, github_diff_url: None, github_patch_url: None },
-      patch: None,
+      patch_references: crate::model::PatchReferences { embed: false, git_show_cmd: "".into(), local_patch_file: None, github: None },
       patch_clipped: None,
-      github_prs: None,
+      patch_lines: None,
       body_lines: None,
+      github: None,
     };
-    c.github_prs = Some(vec![GithubPullRequest {
+    c.github = Some(CommitGithub { pull_requests: vec![GithubPullRequest {
       number: num,
       title: String::new(),
       state: String::new(),
-      body: None,
+      body_lines: None,
       created_at: None,
       merged_at: None,
       closed_at: None,
       html_url: String::new(),
       diff_url: None,
       patch_url: None,
-      user: None,
       submitter: None,
       approver: None,
+      reviewers: None,
       head: None,
       base: None,
       commits: None,
-    }]);
+    }] });
     c
   }
 
@@ -293,11 +296,11 @@ mod tests {
     let repo = td.path().to_str().unwrap();
     let mut c = minimal_commit_with_pr(0);
     enrich_with_github_prs(&mut c, repo);
-    assert!(c.github_prs.as_ref().unwrap().len() >= 1);
-    assert_eq!(c.patch_ref.github_diff_url.as_deref(), Some("https://github.com/openai/example/pull/10.diff"));
+    assert!(c.github.as_ref().unwrap().pull_requests.len() >= 1);
+    // patch_references.github should include commit_url derived from origin
+    assert!(c.patch_references.github.as_ref().and_then(|g| g.commit_url.clone()).unwrap().contains("/commit/"));
     // Submitter mirrors user; approver not available from list endpoint
-    let pr0 = &c.github_prs.as_ref().unwrap()[0];
-    assert_eq!(pr0.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    let pr0 = &c.github.as_ref().unwrap().pull_requests[0];
     assert_eq!(pr0.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
     assert!(pr0.approver.is_none());
     std::env::remove_var("GITHUB_TOKEN");
@@ -330,7 +333,7 @@ mod tests {
     let pr = &out[0];
     assert_eq!(pr.number, 1);
     assert_eq!(pr.title, "Add feature");
-    assert_eq!(pr.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
     assert_eq!(pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
     assert_eq!(pr.approver.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("marge"));
     assert_eq!(pr.commits.as_ref().unwrap()[0].short_sha.len(), 7);
@@ -433,10 +436,7 @@ mod tests {
     let api = ghapi::make_env_api();
     let mut c = minimal_commit_with_pr(0);
     enrich_with_github_prs_with_api(&mut c, repo, api.as_ref());
-    assert_eq!(
-      c.patch_ref.github_diff_url.as_deref(),
-      Some("https://github.com/openai/example/pull/10.diff")
-    );
+    assert!(c.patch_references.github.as_ref().and_then(|g| g.commit_url.clone()).is_some());
 
     std::env::remove_var("GAR_TEST_PR_JSON");
   }

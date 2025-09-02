@@ -14,16 +14,17 @@
 // === Module Header END ===
 
 use anyhow::Result;
+use chrono::TimeZone;
 
 use crate::gitio;
-use crate::model::{Commit, FileEntry, PatchRef, Person, Timestamps};
+use crate::model::{Commit, FileEntry, PatchReferences, PatchReferencesGithub, Person, Timestamps};
 use crate::util::{iso_in_tz, short_sha, clip_patch};
 use crate::enrichment::github_pull_requests::enrich_with_github_prs;
 use std::path::Path;
 
 pub struct ProcessContext<'a> {
   pub repo: &'a str,
-  pub tz_local: bool,
+  pub tz: &'a str,
   pub github_prs: bool,
   pub include_patch: bool,
   pub max_patch_bytes: usize,
@@ -75,13 +76,16 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
   let files = build_file_entries(context.repo, sha)?;
   let diffstat_text = gitio::commit_shortstat(context.repo, sha)?;
 
-  let timestamps = Timestamps {
-    author: meta.at,
-    commit: meta.ct,
-    author_local: iso_in_tz(meta.at, context.tz_local),
-    commit_local: iso_in_tz(meta.ct, context.tz_local),
-    timezone: if context.tz_local { "local".into() } else { "utc".into() },
+  let author_local = iso_in_tz(meta.at, context.tz);
+  let commit_local = iso_in_tz(meta.ct, context.tz);
+  let timezone = if context.tz.eq_ignore_ascii_case("local") {
+    let dt = chrono::Local.timestamp_opt(meta.ct, 0).single().unwrap();
+    dt.format("%Z").to_string()
+  } else {
+    context.tz.to_string()
   };
+
+  let timestamps = Timestamps { author: meta.at, commit: meta.ct, author_local, commit_local, timezone };
 
   let author = Person {
     name: meta.author_name,
@@ -95,13 +99,7 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     date: meta.committer_date,
   };
 
-  let patch_ref = PatchRef {
-    embed: context.include_patch,
-    git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha),
-    local_patch_file: None,
-    github_diff_url: None,
-    github_patch_url: None,
-  };
+  let patch_references = PatchReferences { embed: context.include_patch, git_show_cmd: format!("git show --patch --format= --no-color {}", meta.sha), local_patch_file: None, github: None };
 
   let commit = Commit {
     sha: meta.sha.clone(),
@@ -114,11 +112,11 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     body: meta.body,
     files,
     diffstat_text,
-    patch_ref,
-    patch: None,
+    patch_references,
     patch_clipped: None,
-    github_prs: None,
+    patch_lines: None,
     body_lines: None,
+    github: None,
   };
 
   Ok(commit)
@@ -130,8 +128,8 @@ pub fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
 
   if context.include_patch {
     let patch_text = gitio::commit_patch(context.repo, sha)?;
-    let (patch, clipped) = clip_patch(patch_text, context.max_patch_bytes);
-    commit.patch = patch;
+    let (maybe_patch, clipped) = clip_patch(patch_text, context.max_patch_bytes);
+    commit.patch_lines = maybe_patch.map(|p| p.lines().map(String::from).collect());
     commit.patch_clipped = clipped;
   }
 
@@ -151,6 +149,6 @@ pub fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path
   let path = directory_path.join(format!("{}.patch", commit.short_sha));
   let patch_content = gitio::commit_patch(repo, &commit.sha)?;
   std::fs::write(&path, patch_content)?;
-  commit.patch_ref.local_patch_file = Some(path.to_string_lossy().to_string());
+  commit.patch_references.local_patch_file = Some(path.to_string_lossy().to_string());
   Ok(())
 }
