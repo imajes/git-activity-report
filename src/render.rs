@@ -20,7 +20,7 @@ use anyhow::Result;
 use chrono::{DateTime, Local};
 
 use crate::gitio;
-use crate::model::{BranchItems, Commit, ManifestItem, Range, SimpleReport, Summary, UnmergedActivity};
+use crate::model::{BranchItems, ChangeSet, Commit, ManifestItem, RangeInfo, ReportOptions, ReportSummary, SimpleReport, UnmergedActivity};
 use crate::util::format_shard_name;
 
 // --- Parameter Structs ---
@@ -35,7 +35,7 @@ pub struct ReportParams {
   pub include_merges: bool,
   pub include_patch: bool,
   pub max_patch_bytes: usize,
-  pub tz_local: bool,
+  pub tz: String,
   pub split_apart: bool,
   pub split_out: Option<String>,
   pub include_unmerged: bool,
@@ -58,7 +58,7 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
-    tz_local: params.tz_local,
+    tz: &params.tz,
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
@@ -66,7 +66,7 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
 
   let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
   let mut authors: BTreeMap<String, i64> = BTreeMap::new();
-  let mut summary = Summary {
+  let mut changeset = ChangeSet {
     additions: 0,
     deletions: 0,
     files_touched: 0,
@@ -85,38 +85,21 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
     *authors.entry(author_key).or_insert(0) += 1;
 
     for f in &commit.files {
-      summary.additions += f.additions.unwrap_or(0);
-      summary.deletions += f.deletions.unwrap_or(0);
+      changeset.additions += f.additions.unwrap_or(0);
+      changeset.deletions += f.deletions.unwrap_or(0);
       files_touched.insert(f.file.clone());
     }
 
     commits.push(commit);
   }
 
-  summary.files_touched = files_touched.len();
+  changeset.files_touched = files_touched.len();
 
-  let pull_requests = if params.github_prs {
-    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
-      .or(Some(Vec::new()))
-  } else {
-    None
-  };
+  let range = RangeInfo { label: params.label.clone().unwrap_or_else(|| "window".into()), start: params.since.clone(), end: params.until.clone() };
+  let report_options = ReportOptions { include_merges: params.include_merges, include_patch: params.include_patch, include_unmerged: params.include_unmerged, tz: params.tz.clone() };
+  let summary = ReportSummary { repo: params.repo.clone(), range, count: commits.len(), report_options, changes: changeset };
 
-  let report = SimpleReport {
-    repo: params.repo.clone(),
-    range: Range {
-      since: params.since.clone(),
-      until: params.until.clone(),
-    },
-    include_merges: params.include_merges,
-    include_patch: params.include_patch,
-    count: commits.len(),
-    authors,
-    summary,
-    commits,
-    pull_requests,
-    items: None,
-  };
+  let report = SimpleReport { summary, authors, commits, items: None, unmerged_activity: None };
 
   Ok(report)
 }
@@ -156,7 +139,7 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
-    tz_local: params.tz_local,
+    tz: &params.tz,
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
@@ -173,28 +156,10 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     commits.push(c);
   }
 
-  let pull_requests = if params.github_prs {
-    crate::enrichment::github_pull_requests::collect_pull_requests_for_commits(&commits, &params.repo)
-      .or(Some(Vec::new()))
-  } else {
-    None
-  };
-
-  let report = SimpleReport {
-    repo: params.repo.clone(),
-    range: Range {
-      since: params.since.clone(),
-      until: params.until.clone(),
-    },
-    include_merges: params.include_merges,
-    include_patch: params.include_patch,
-    count: commits.len(),
-    authors,
-    summary,
-    commits,
-    pull_requests,
-    items: Some(items),
-  };
+  let range = RangeInfo { label: label.clone(), start: params.since.clone(), end: params.until.clone() };
+  let report_options = ReportOptions { include_merges: params.include_merges, include_patch: params.include_patch, include_unmerged: params.include_unmerged, tz: params.tz.clone() };
+  let summary = ReportSummary { repo: params.repo.clone(), range, count: commits.len(), report_options, changes: summary };
+  let report = SimpleReport { summary, authors, commits, items: Some(items), unmerged_activity: None };
 
   let report_path = Path::new(&base_dir).join(format!("report-{}.json", label));
   std::fs::write(&report_path, serde_json::to_vec_pretty(&report)?)?;
@@ -209,11 +174,11 @@ fn process_commit_range(
   params: &ReportParams,
   subdir: &Path,
   label: &str,
-) -> Result<(Vec<ManifestItem>, Summary, BTreeMap<String, i64>)> {
+) -> Result<(Vec<ManifestItem>, ChangeSet, BTreeMap<String, i64>)> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
-    tz_local: params.tz_local,
+    tz: &params.tz,
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
@@ -221,7 +186,7 @@ fn process_commit_range(
 
   let mut items = Vec::with_capacity(shas.len());
   let mut authors: BTreeMap<String, i64> = BTreeMap::new();
-  let mut summary = Summary {
+  let mut summary = ChangeSet {
     additions: 0,
     deletions: 0,
     files_touched: 0,
@@ -237,7 +202,7 @@ fn process_commit_range(
     }
 
     // Write commit shard to disk
-    let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, params.tz_local);
+    let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, &params.tz);
     let shard_path = subdir.join(&fname);
     std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
 
@@ -271,7 +236,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
 
   let context = ProcessContext {
     repo: &params.repo,
-    tz_local: params.tz_local,
+    tz: &params.tz,
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
@@ -309,7 +274,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
         crate::commit::save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
       }
 
-      let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, params.tz_local);
+      let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, &params.tz);
       let shard_path = branch_dir.join(&fname);
       std::fs::create_dir_all(shard_path.parent().unwrap())?;
       std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
@@ -438,7 +403,7 @@ mod tests {
       include_merges: true,
       include_patch: false,
       max_patch_bytes: 0,
-      tz_local: true,
+      tz: "local".into(),
       split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: true,
@@ -465,7 +430,7 @@ mod tests {
       include_merges: true,
       include_patch: true,
       max_patch_bytes: 32,
-      tz_local: false,
+      tz: "utc".into(),
       split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: false,
@@ -492,7 +457,7 @@ mod tests {
       include_merges: false,
       include_patch: false,
       max_patch_bytes: 0,
-      tz_local: false,
+      tz: "utc".into(),
       split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: false,
@@ -541,7 +506,7 @@ mod tests {
       include_merges: true,
       include_patch: false,
       max_patch_bytes: 0,
-      tz_local: false,
+      tz: "utc".into(),
       split_apart: true,
       split_out: Some(tmpdir.path().to_string_lossy().to_string()),
       include_unmerged: true,
@@ -556,8 +521,8 @@ mod tests {
     assert!(path.exists());
     let data = std::fs::read(&path).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&data).unwrap();
-    // Report should include range and commits array
-    assert!(v.get("range").is_some());
+    // Report should include summary.range and commits array
+    assert!(v.get("summary").and_then(|s| s.get("range")).is_some());
     assert!(v.get("commits").is_some());
   }
 
