@@ -65,7 +65,36 @@ pub fn save_range_report(
         .join(file_rel.as_ref().expect("file name for multi"));
       std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
     } else if cfg.out != "-" {
-      std::fs::write(&cfg.out, serde_json::to_vec_pretty(&report)?)?;
+      let out_path = std::path::Path::new(&cfg.out);
+      let is_dir_like = cfg.out.ends_with('/') || out_path.is_dir();
+      if is_dir_like {
+        let label = &range.label;
+        std::fs::create_dir_all(out_path)?;
+        let file_path = out_path.join(format!("report-{}.json", label));
+        // If count==0, do not write a file; print JSON instead
+        let count = report
+          .get("summary")
+          .and_then(|s| s.get("count"))
+          .and_then(|v| v.as_u64())
+          .unwrap_or(0);
+        if count == 0 {
+          print_json = Some(report);
+        } else {
+          std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
+        }
+      } else {
+        if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+        let count = report
+          .get("summary")
+          .and_then(|s| s.get("count"))
+          .and_then(|v| v.as_u64())
+          .unwrap_or(0);
+        if count == 0 {
+          print_json = Some(report);
+        } else {
+          std::fs::write(&out_path, serde_json::to_vec_pretty(&report)?)?;
+        }
+      }
     } else {
       print_json = Some(report);
     }
@@ -73,16 +102,7 @@ pub fn save_range_report(
     print_json = Some(report);
   }
 
-  let entry = if cfg.multi_windows {
-    Some(RangeEntry {
-      label: range.label.clone(),
-      since: range.since.clone(),
-      until: range.until.clone(),
-      file: file_rel.expect("file name for multi"),
-    })
-  } else {
-    None
-  };
+  let entry = if cfg.multi_windows { Some(RangeEntry { label: range.label.clone(), start: range.since.clone(), end: range.until.clone(), file: file_rel.expect("file name for multi") }) } else { None };
   Ok((entry, print_json))
 }
 
@@ -136,7 +156,7 @@ pub fn process_ranges(
 mod tests {
   use super::*;
   use crate::cli::{EffectiveConfig};
-  use crate::range_windows::{WindowSpec, Tz};
+  use crate::range_windows::WindowSpec;
 
   fn base_cfg(repo: String) -> EffectiveConfig {
     EffectiveConfig {
@@ -151,7 +171,7 @@ mod tests {
       out: "-".into(),
       github_prs: false,
       include_unmerged: false,
-      tz: Tz::Utc,
+      tz: "utc".into(),
       now_override: None,
     }
   }
