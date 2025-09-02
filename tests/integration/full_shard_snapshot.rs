@@ -35,12 +35,13 @@ fn snapshot_first_shard_commit() {
   let top: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let dir = top["dir"].as_str().unwrap();
   // Open the per-range report (single split) or overall manifest (multi-range)
-  let pointer = top.get("file").and_then(|v| v.as_str())
+  let pointer = top
+    .get("file")
+    .and_then(|v| v.as_str())
     .or_else(|| top.get("manifest").and_then(|v| v.as_str()))
     .expect("pointer file or manifest");
-  let pointed_json: serde_json::Value = serde_json::from_slice(
-    &std::fs::read(std::path::Path::new(dir).join(pointer)).unwrap(),
-  ).unwrap();
+  let pointed_json: serde_json::Value =
+    serde_json::from_slice(&std::fs::read(std::path::Path::new(dir).join(pointer)).unwrap()).unwrap();
 
   // In single split mode, shard list is in report.items; in multi-range, items in overall manifest
   let label = pointed_json.get("label").and_then(|v| v.as_str()).unwrap_or("");

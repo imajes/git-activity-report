@@ -73,6 +73,7 @@ pub struct RangeEntry {
 }
 
 /// Build and write an overall manifest given pre-computed entries.
+#[allow(clippy::too_many_arguments)]
 pub fn write_overall_manifest(
   repo: &str,
   generated_at: DateTime<Local>,
@@ -111,20 +112,21 @@ mod tests {
       .single()
       .unwrap();
     let entries = vec![
-      RangeEntry { label: "2025-07".into(), start: "2025-07-01T00:00:00".into(), end: "2025-08-01T00:00:00".into(), file: "report-2025-07.json".into() },
-      RangeEntry { label: "2025-08".into(), start: "2025-08-01T00:00:00".into(), end: "2025-09-01T00:00:00".into(), file: "report-2025-08.json".into() },
+      RangeEntry {
+        label: "2025-07".into(),
+        start: "2025-07-01T00:00:00".into(),
+        end: "2025-08-01T00:00:00".into(),
+        file: "report-2025-07.json".into(),
+      },
+      RangeEntry {
+        label: "2025-08".into(),
+        start: "2025-08-01T00:00:00".into(),
+        end: "2025-09-01T00:00:00".into(),
+        file: "report-2025-08.json".into(),
+      },
     ];
-    let path = write_overall_manifest(
-      "<repo>",
-      gen_at,
-      true,
-      true,
-      false,
-      false,
-      &base,
-      &entries,
-    )
-    .expect("write manifest");
+    let path =
+      write_overall_manifest("<repo>", gen_at, true, true, false, false, &base, &entries).expect("write manifest");
     assert!(path.ends_with("manifest.json"));
     let buf = std::fs::read(path).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();

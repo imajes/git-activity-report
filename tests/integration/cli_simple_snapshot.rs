@@ -11,7 +11,6 @@ fn cli_simple_snapshot() {
   let mut cmd = test_support::cmd_bin("git-activity-report");
   let out = cmd
     .args([
-      
       "--since",
       "2025-08-01",
       "--until",

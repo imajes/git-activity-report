@@ -19,9 +19,9 @@ use anyhow::Result;
 use crate::cli;
 use crate::manifest::{RangeEntry, write_overall_manifest};
 use crate::params::build_report_params;
+use crate::range_windows::LabeledRange;
 use crate::render::run_report;
 use crate::util;
-use crate::range_windows::LabeledRange;
 
 pub fn generate_range_report(
   cfg: &cli::EffectiveConfig,
@@ -61,8 +61,7 @@ pub fn save_range_report(
   let mut print_json: Option<serde_json::Value> = None;
   if !cfg.split_apart {
     if let Some(base_dir) = base_dir_opt {
-      let file_path = std::path::Path::new(base_dir)
-        .join(file_rel.as_ref().expect("file name for multi"));
+      let file_path = std::path::Path::new(base_dir).join(file_rel.as_ref().expect("file name for multi"));
       std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
     } else if cfg.out != "-" {
       let out_path = std::path::Path::new(&cfg.out);
@@ -83,7 +82,9 @@ pub fn save_range_report(
           std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
         }
       } else {
-        if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+        if let Some(parent) = out_path.parent() {
+          std::fs::create_dir_all(parent)?;
+        }
         let count = report
           .get("summary")
           .and_then(|s| s.get("count"))
@@ -92,7 +93,7 @@ pub fn save_range_report(
         if count == 0 {
           print_json = Some(report);
         } else {
-          std::fs::write(&out_path, serde_json::to_vec_pretty(&report)?)?;
+          std::fs::write(out_path, serde_json::to_vec_pretty(&report)?)?;
         }
       }
     } else {
@@ -102,7 +103,16 @@ pub fn save_range_report(
     print_json = Some(report);
   }
 
-  let entry = if cfg.multi_windows { Some(RangeEntry { label: range.label.clone(), start: range.since.clone(), end: range.until.clone(), file: file_rel.expect("file name for multi") }) } else { None };
+  let entry = if cfg.multi_windows {
+    Some(RangeEntry {
+      label: range.label.clone(),
+      start: range.since.clone(),
+      end: range.until.clone(),
+      file: file_rel.expect("file name for multi"),
+    })
+  } else {
+    None
+  };
   Ok((entry, print_json))
 }
 
@@ -123,8 +133,12 @@ pub fn process_ranges(
   for r in ranges.iter() {
     let out = generate_range_report(cfg, r, now_opt, base_dir_opt.as_deref())?;
     let (entry, to_print) = save_range_report(cfg, r, out, base_dir_opt.as_deref())?;
-    if let Some(e) = entry { entries.push(e); }
-    if let Some(v) = to_print { last_single_output = Some(v); }
+    if let Some(e) = entry {
+      entries.push(e);
+    }
+    if let Some(v) = to_print {
+      last_single_output = Some(v);
+    }
   }
 
   if cfg.multi_windows {
@@ -155,13 +169,16 @@ pub fn process_ranges(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cli::{EffectiveConfig};
+  use crate::cli::EffectiveConfig;
   use crate::range_windows::WindowSpec;
 
   fn base_cfg(repo: String) -> EffectiveConfig {
     EffectiveConfig {
       repo,
-      window: WindowSpec::SinceUntil { since: "1970-01-01".into(), until: "2100-01-01".into() },
+      window: WindowSpec::SinceUntil {
+        since: "1970-01-01".into(),
+        until: "2100-01-01".into(),
+      },
       multi_windows: false,
       split_apart: false,
       include_merges: true,
@@ -190,7 +207,11 @@ mod tests {
     let mut cfg = base_cfg(repo);
     cfg.split_apart = false;
     cfg.multi_windows = false;
-    let range = LabeledRange { label: "window".into(), since: "2025-08-01".into(), until: "2025-09-01".into() };
+    let range = LabeledRange {
+      label: "window".into(),
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+    };
 
     let out = generate_range_report(&cfg, &range, None, None).expect("gen");
     let (_entry, print) = save_range_report(&cfg, &range, out, None).expect("save");
@@ -205,7 +226,11 @@ mod tests {
     cfg.multi_windows = false;
     let td = tempfile::TempDir::new().unwrap();
     cfg.out = td.path().to_string_lossy().to_string();
-    let range = LabeledRange { label: "window".into(), since: "2025-08-01".into(), until: "2025-09-01".into() };
+    let range = LabeledRange {
+      label: "window".into(),
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+    };
     let out = generate_range_report(&cfg, &range, None, Some(&cfg.out)).expect("gen");
     let (entry, print) = save_range_report(&cfg, &range, out.clone(), Some(&cfg.out)).expect("save");
     assert!(entry.is_none(), "single split should not create manifest entry");
@@ -222,7 +247,11 @@ mod tests {
     cfg.multi_windows = true;
     let td = tempfile::TempDir::new().unwrap();
     cfg.out = td.path().to_string_lossy().to_string();
-    let range = LabeledRange { label: "2025-08".into(), since: "2025-08-01".into(), until: "2025-09-01".into() };
+    let range = LabeledRange {
+      label: "2025-08".into(),
+      since: "2025-08-01".into(),
+      until: "2025-09-01".into(),
+    };
     let out = generate_range_report(&cfg, &range, None, Some(&cfg.out)).expect("gen");
     let (entry, print) = save_range_report(&cfg, &range, out, Some(&cfg.out)).expect("save");
     assert!(print.is_none());

@@ -18,25 +18,28 @@
 //! }
 //! ```
 
-use once_cell::sync::Lazy;
 use camino::Utf8PathBuf;
-use tracing_subscriber::{fmt, EnvFilter};
+use once_cell::sync::Lazy;
+use tracing_subscriber::{EnvFilter, fmt};
 
-use std::{env, path::{Path, PathBuf}};
 use std::process::Command;
+use std::{
+  env,
+  path::{Path, PathBuf},
+};
 
 /// Initialize `tracing` once, honoring `RUST_LOG` and writing via the test writer.
 ///
 /// Safe to call from multiple tests; only the first call configures the global subscriber.
 pub fn init_tracing() {
-    static INIT: Lazy<()> = Lazy::new(|| {
-        let filter = EnvFilter::try_from_default_env()
-            .or_else(|_| EnvFilter::try_new("warn,test=info"))
-            .unwrap();
-        // with_test_writer() causes logs to appear alongside failing tests only (cargo/nextest)
-        let _ = fmt().with_env_filter(filter).with_test_writer().try_init();
-    });
-    Lazy::force(&INIT);
+  static INIT: Lazy<()> = Lazy::new(|| {
+    let filter = EnvFilter::try_from_default_env()
+      .or_else(|_| EnvFilter::try_new("warn,test=info"))
+      .unwrap();
+    // with_test_writer() causes logs to appear alongside failing tests only (cargo/nextest)
+    let _ = fmt().with_env_filter(filter).with_test_writer().try_init();
+  });
+  Lazy::force(&INIT);
 }
 
 /// Initialize insta snapshot settings once per test process.
@@ -44,16 +47,16 @@ pub fn init_tracing() {
 /// - Centralizes snapshot files in `tests/snapshots` (relative to the test binary's CWD)
 /// - Omits `Expression:` in snapshot headers for cleaner diffs
 pub fn init_insta() {
-    static INIT: Lazy<()> = Lazy::new(|| {
-        let mut settings = insta::Settings::clone_current();
-        // Point to the central snapshots directory in the workspace
-        settings.set_snapshot_path("../snapshots");
-        settings.set_omit_expression(true);
-        // Bind settings to the thread for the remainder of the test process by leaking the guard
-        let guard = settings.bind_to_scope();
-        std::mem::forget(guard);
-    });
-    Lazy::force(&INIT);
+  static INIT: Lazy<()> = Lazy::new(|| {
+    let mut settings = insta::Settings::clone_current();
+    // Point to the central snapshots directory in the workspace
+    settings.set_snapshot_path("../snapshots");
+    settings.set_omit_expression(true);
+    // Bind settings to the thread for the remainder of the test process by leaking the guard
+    let guard = settings.bind_to_scope();
+    std::mem::forget(guard);
+  });
+  Lazy::force(&INIT);
 }
 
 /// Return the path to the repository's `tests/fixtures` directory.
@@ -61,53 +64,50 @@ pub fn init_insta() {
 /// Uses the package directory (where `Cargo.toml` lives), so it's stable regardless
 /// of the runner's working directory (cargo vs nextest).
 pub fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures")
+  PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures")
 }
 
 /// Read a UTF-8 text fixture into a string.
 pub fn read_fixture_text<P: AsRef<Path>>(rel_path: P) -> String {
-    let path = fixtures_dir().join(rel_path);
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
+  let path = fixtures_dir().join(rel_path);
+  std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
 }
 
 /// Read a binary fixture into bytes.
 pub fn read_fixture_bytes<P: AsRef<Path>>(rel_path: P) -> Vec<u8> {
-    let path = fixtures_dir().join(rel_path);
-    std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
+  let path = fixtures_dir().join(rel_path);
+  std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
 }
 
 /// Deserialize a JSON fixture into `T` (enable `serde` feature).
 #[cfg(feature = "serde")]
 pub fn read_fixture_json<T, P>(rel_path: P) -> T
 where
-    T: serde::de::DeserializeOwned,
-    P: AsRef<Path>,
+  T: serde::de::DeserializeOwned,
+  P: AsRef<Path>,
 {
-    let path = fixtures_dir().join(rel_path);
-    let file = std::fs::File::open(&path)
-        .unwrap_or_else(|e| panic!("failed to open fixture {}: {e}", path.display()));
-    serde_json::from_reader::<_, T>(file)
-        .unwrap_or_else(|e| panic!("failed to parse JSON fixture {}: {e}", path.display()))
+  let path = fixtures_dir().join(rel_path);
+  let file = std::fs::File::open(&path).unwrap_or_else(|e| panic!("failed to open fixture {}: {e}", path.display()));
+  serde_json::from_reader::<_, T>(file)
+    .unwrap_or_else(|e| panic!("failed to parse JSON fixture {}: {e}", path.display()))
 }
 
 /// Create a temp directory that deletes on drop.
 pub fn tempdir() -> tempfile::TempDir {
-    tempfile::tempdir().expect("create tempdir")
+  tempfile::tempdir().expect("create tempdir")
 }
 
 /// Create (and return) a temp working directory for CLI tests.
 /// Also sets CWD to that directory for the duration of `_guard`'s lifetime.
 pub fn temp_cwd() -> (tempfile::TempDir, CwdGuard) {
-    let td = tempdir();
-    let guard = CwdGuard::push(td.path());
-    (td, guard)
+  let td = tempdir();
+  let guard = CwdGuard::push(td.path());
+  (td, guard)
 }
 
 /// Set multiple environment variables for the duration of the returned guard.
 pub fn with_env(vars: &[(&str, &str)]) -> EnvGuard {
-    EnvGuard::set_many(vars)
+  EnvGuard::set_many(vars)
 }
 
 /// Run a binary target with `assert_cmd`, returning the ready-to-run `Command`.
@@ -121,62 +121,61 @@ pub fn with_env(vars: &[(&str, &str)]) -> EnvGuard {
 /// cmd.arg("--help").assert().success().stdout(predicate::str::contains("USAGE"));
 /// ```
 pub fn cmd_bin(bin: &str) -> assert_cmd::Command {
-    init_tracing();
-    assert_cmd::Command::cargo_bin(bin).expect("binary target not found")
+  init_tracing();
+  assert_cmd::Command::cargo_bin(bin).expect("binary target not found")
 }
 
 /// Resolve a path inside a temp directory in a platform-safe way (UTF-8).
 pub fn utf8_join(base: &Path, rel: &str) -> Utf8PathBuf {
-    Utf8PathBuf::from_path_buf(base.join(rel)).expect("valid UTF-8 path")
+  Utf8PathBuf::from_path_buf(base.join(rel)).expect("valid UTF-8 path")
 }
 
 /// Guard that restores the previous current working directory when dropped.
 pub struct CwdGuard {
-    prev: PathBuf,
+  prev: PathBuf,
 }
 
 impl CwdGuard {
-    pub fn push<P: AsRef<Path>>(new_dir: P) -> Self {
-        let prev = env::current_dir().expect("cwd");
-        env::set_current_dir(&new_dir).unwrap_or_else(|e| {
-            panic!("failed to set cwd to {}: {e}", new_dir.as_ref().display())
-        });
-        Self { prev }
-    }
+  pub fn push<P: AsRef<Path>>(new_dir: P) -> Self {
+    let prev = env::current_dir().expect("cwd");
+    env::set_current_dir(&new_dir)
+      .unwrap_or_else(|e| panic!("failed to set cwd to {}: {e}", new_dir.as_ref().display()));
+    Self { prev }
+  }
 }
 
 impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        let _ = env::set_current_dir(&self.prev);
-    }
+  fn drop(&mut self) {
+    let _ = env::set_current_dir(&self.prev);
+  }
 }
 
 /// Guard for temporarily setting environment variables.
 pub struct EnvGuard {
-    prev: Vec<(String, Option<String>)>,
+  prev: Vec<(String, Option<String>)>,
 }
 
 impl EnvGuard {
-    pub fn set_many(kv: &[(&str, &str)]) -> Self {
-        let mut prev = Vec::with_capacity(kv.len());
-        for (k, v) in kv {
-            let k_owned = k.to_string();
-            prev.push((k_owned.clone(), env::var(k).ok()));
-            env::set_var(k, v);
-        }
-        Self { prev }
+  pub fn set_many(kv: &[(&str, &str)]) -> Self {
+    let mut prev = Vec::with_capacity(kv.len());
+    for (k, v) in kv {
+      let k_owned = k.to_string();
+      prev.push((k_owned.clone(), env::var(k).ok()));
+      env::set_var(k, v);
     }
+    Self { prev }
+  }
 }
 
 impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        for (k, old) in self.prev.drain(..) {
-            match old {
-                Some(v) => env::set_var(&k, v),
-                None => env::remove_var(&k),
-            }
-        }
+  fn drop(&mut self) {
+    for (k, old) in self.prev.drain(..) {
+      match old {
+        Some(v) => env::set_var(&k, v),
+        None => env::remove_var(&k),
+      }
     }
+  }
 }
 
 // --- Optional Tokio helpers (feature = "tokio") ---
@@ -184,13 +183,13 @@ impl Drop for EnvGuard {
 /// Pause tokio time for deterministic time-based async tests.
 #[cfg(feature = "tokio")]
 pub fn tokio_time_pause() {
-    tokio::time::pause();
+  tokio::time::pause();
 }
 
 /// Advance tokio time by `dur`.
 #[cfg(feature = "tokio")]
 pub async fn tokio_time_advance(dur: std::time::Duration) {
-    tokio::time::advance(dur).await;
+  tokio::time::advance(dur).await;
 }
 
 /// imported from tests/common/mod.rs

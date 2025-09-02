@@ -20,7 +20,9 @@ use anyhow::Result;
 use chrono::{DateTime, Local};
 
 use crate::gitio;
-use crate::model::{BranchItems, ChangeSet, Commit, ManifestItem, RangeInfo, ReportOptions, ReportSummary, SimpleReport, UnmergedActivity};
+use crate::model::{
+  BranchItems, ChangeSet, Commit, ManifestItem, RangeInfo, ReportOptions, ReportSummary, SimpleReport, UnmergedActivity,
+};
 use crate::util::format_shard_name;
 
 // --- Parameter Structs ---
@@ -95,11 +97,32 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
 
   changeset.files_touched = files_touched.len();
 
-  let range = RangeInfo { label: params.label.clone().unwrap_or_else(|| "window".into()), start: params.since.clone(), end: params.until.clone() };
-  let report_options = ReportOptions { include_merges: params.include_merges, include_patch: params.include_patch, include_unmerged: params.include_unmerged, tz: params.tz.clone() };
-  let summary = ReportSummary { repo: params.repo.clone(), range, count: commits.len(), report_options, changes: changeset };
+  let range = RangeInfo {
+    label: params.label.clone().unwrap_or_else(|| "window".into()),
+    start: params.since.clone(),
+    end: params.until.clone(),
+  };
+  let report_options = ReportOptions {
+    include_merges: params.include_merges,
+    include_patch: params.include_patch,
+    include_unmerged: params.include_unmerged,
+    tz: params.tz.clone(),
+  };
+  let summary = ReportSummary {
+    repo: params.repo.clone(),
+    range,
+    count: commits.len(),
+    report_options,
+    changes: changeset,
+  };
 
-  let report = SimpleReport { summary, authors, commits, items: None, unmerged_activity: None };
+  let report = SimpleReport {
+    summary,
+    authors,
+    commits,
+    items: None,
+    unmerged_activity: None,
+  };
 
   Ok(report)
 }
@@ -156,10 +179,31 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     commits.push(c);
   }
 
-  let range = RangeInfo { label: label.clone(), start: params.since.clone(), end: params.until.clone() };
-  let report_options = ReportOptions { include_merges: params.include_merges, include_patch: params.include_patch, include_unmerged: params.include_unmerged, tz: params.tz.clone() };
-  let summary = ReportSummary { repo: params.repo.clone(), range, count: commits.len(), report_options, changes: summary };
-  let report = SimpleReport { summary, authors, commits, items: Some(items), unmerged_activity: None };
+  let range = RangeInfo {
+    label: label.clone(),
+    start: params.since.clone(),
+    end: params.until.clone(),
+  };
+  let report_options = ReportOptions {
+    include_merges: params.include_merges,
+    include_patch: params.include_patch,
+    include_unmerged: params.include_unmerged,
+    tz: params.tz.clone(),
+  };
+  let summary = ReportSummary {
+    repo: params.repo.clone(),
+    range,
+    count: commits.len(),
+    report_options,
+    changes: summary,
+  };
+  let report = SimpleReport {
+    summary,
+    authors,
+    commits,
+    items: Some(items),
+    unmerged_activity: None,
+  };
 
   let report_path = Path::new(&base_dir).join(format!("report-{}.json", label));
   std::fs::write(&report_path, serde_json::to_vec_pretty(&report)?)?;
@@ -351,7 +395,7 @@ mod tests {
       include_merges: true,
       include_patch: true,
       max_patch_bytes: 16,
-      tz_local: false,
+      tz: "utc".into(),
       split_apart: false,
       split_out: None,
       include_unmerged: false,
@@ -360,8 +404,8 @@ mod tests {
       now_local: None,
     };
     let report = run_simple(&params).unwrap();
-    assert!(report.count >= 1);
-    assert!(report.count >= 1);
+    assert!(report.summary.count >= 1);
+    assert!(report.summary.count >= 1);
     assert!(std::fs::read_dir(tmpdir.path()).unwrap().next().is_some());
     let clipped_any = report.commits.iter().any(|c| c.patch_clipped == Some(true));
     assert!(clipped_any);
@@ -378,7 +422,7 @@ mod tests {
       include_merges: false,
       include_patch: false,
       max_patch_bytes: 0,
-      tz_local: true,
+      tz: "local".into(),
       split_apart: false,
       split_out: None,
       include_unmerged: false,
@@ -387,8 +431,8 @@ mod tests {
       now_local: None,
     };
     let report = run_simple(&params).unwrap();
-    assert!(report.count >= 1);
-    assert!(report.count >= 1);
+    assert!(report.summary.count >= 1);
+    assert!(report.summary.count >= 1);
   }
 
   #[test]

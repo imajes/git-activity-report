@@ -18,8 +18,8 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::util;
 use crate::range_windows::WindowSpec;
+use crate::util;
 
 #[derive(Parser, Debug)]
 #[command(

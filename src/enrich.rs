@@ -19,7 +19,11 @@ pub fn apply_commit_enrichments(commit: &mut Commit, repo: &str, github_prs: boo
 
 /// Aggregate report-level enrichments based on flags.
 #[cfg(any(test, feature = "testutil"))]
-pub fn aggregate_report_enrichments(commits: &[Commit], repo: &str, github_prs: bool) -> Option<Vec<GithubPullRequest>> {
+pub fn aggregate_report_enrichments(
+  commits: &[Commit],
+  repo: &str,
+  github_prs: bool,
+) -> Option<Vec<GithubPullRequest>> {
   if !github_prs {
     return None;
   }
@@ -35,8 +39,16 @@ mod tests {
       sha: "deadbeef".into(),
       short_sha: "deadbee".into(),
       parents: vec![],
-      author: crate::model::Person { name: "A".into(), email: "a@ex".into(), date: "".into() },
-      committer: crate::model::Person { name: "A".into(), email: "a@ex".into(), date: "".into() },
+      author: crate::model::Person {
+        name: "A".into(),
+        email: "a@ex".into(),
+        date: "".into(),
+      },
+      committer: crate::model::Person {
+        name: "A".into(),
+        email: "a@ex".into(),
+        date: "".into(),
+      },
       timestamps: crate::model::Timestamps {
         author: 0,
         commit: 0,
@@ -48,7 +60,12 @@ mod tests {
       body: "".into(),
       files: vec![],
       diffstat_text: "".into(),
-      patch_references: crate::model::PatchReferences { embed: false, git_show_cmd: "".into(), local_patch_file: None, github: None },
+      patch_references: crate::model::PatchReferences {
+        embed: false,
+        git_show_cmd: "".into(),
+        local_patch_file: None,
+        github: None,
+      },
       patch_clipped: None,
       patch_lines: None,
       body_lines: None,
