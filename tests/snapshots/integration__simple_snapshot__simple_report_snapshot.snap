@@ -1,0 +1,112 @@
+---
+source: tests/integration/simple_snapshot.rs
+assertion_line: 62
+---
+{
+  "authors": {
+    "Fixture Bot <fixture@example.com>": 2
+  },
+  "commits": [
+    {
+      "author": {
+        "date": "[date]",
+        "email": "fixture@example.com",
+        "name": "Fixture Bot"
+      },
+      "body": "",
+      "committer": {
+        "date": "[date]",
+        "email": "fixture@example.com",
+        "name": "Fixture Bot"
+      },
+      "diffstat_text": "1 file changed, 1 insertion(+)",
+      "files": [
+        {
+          "additions": 1,
+          "deletions": 0,
+          "file": "app/models/user.rb",
+          "status": "A"
+        }
+      ],
+      "parents": [],
+      "patch_ref": {
+        "embed": false,
+        "git_show_cmd": "[git-show]",
+        "github_diff_url": null,
+        "github_patch_url": null,
+        "local_patch_file": null
+      },
+      "sha": "[sha]",
+      "short_sha": "[short]",
+      "subject": "feat: add user model",
+      "timestamps": {
+        "author": 0,
+        "author_local": "[local]",
+        "commit": 0,
+        "commit_local": "[local]",
+        "timezone": "utc"
+      }
+    },
+    {
+      "author": {
+        "date": "[date]",
+        "email": "fixture@example.com",
+        "name": "Fixture Bot"
+      },
+      "body": "",
+      "committer": {
+        "date": "[date]",
+        "email": "fixture@example.com",
+        "name": "Fixture Bot"
+      },
+      "diffstat_text": "2 files changed, 2 insertions(+)",
+      "files": [
+        {
+          "additions": 1,
+          "deletions": 0,
+          "file": "app/services/payment_service.rb",
+          "status": "A"
+        },
+        {
+          "additions": 1,
+          "deletions": 0,
+          "file": "spec/services/payment_service_spec.rb",
+          "status": "A"
+        }
+      ],
+      "parents": [
+        "[sha]"
+      ],
+      "patch_ref": {
+        "embed": false,
+        "git_show_cmd": "[git-show]",
+        "github_diff_url": null,
+        "github_patch_url": null,
+        "local_patch_file": null
+      },
+      "sha": "[sha]",
+      "short_sha": "[short]",
+      "subject": "refactor: extract payment service",
+      "timestamps": {
+        "author": 0,
+        "author_local": "[local]",
+        "commit": 0,
+        "commit_local": "[local]",
+        "timezone": "utc"
+      }
+    }
+  ],
+  "count": 2,
+  "include_merges": true,
+  "include_patch": false,
+  "range": {
+    "since": "2025-08-01",
+    "until": "2025-09-01"
+  },
+  "repo": "<repo>",
+  "summary": {
+    "additions": 3,
+    "deletions": 0,
+    "files_touched": 3
+  }
+}

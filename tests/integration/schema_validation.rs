@@ -1,4 +1,4 @@
-mod common;
+use test_support;
 
 use assert_cmd::Command;
 use jsonschema::validator_for;
@@ -17,7 +17,7 @@ fn compile_schema(name: &str) -> jsonschema::Validator {
 
 #[test]
 fn simple_json_conforms_to_schema() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
 
   let out = Command::cargo_bin("git-activity-report")
@@ -43,7 +43,7 @@ fn simple_json_conforms_to_schema() {
 
 #[test]
 fn multi_range_overall_and_reports_conform_to_schemas() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();

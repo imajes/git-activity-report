@@ -420,4 +420,30 @@ mod tests {
     // With main reset to feature commit, there should be no unmerged commits
     assert!(unmerged.is_empty());
   }
+
+  #[test]
+  fn commit_name_status_parses_rename() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let sh = |args: &[&str]| {
+      let st = std::process::Command::new("git").args(args).current_dir(repo).status().unwrap();
+      assert!(st.success(), "git {:?} failed", args);
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "user.name", "Fixture Bot"]);
+    sh(&["config", "user.email", "fixture@example.com"]);
+    sh(&["config", "commit.gpgsign", "false"]);
+    std::fs::write(repo.join("a.txt"), "a\n").unwrap();
+    sh(&["add", "."]);
+    sh(&["commit", "-q", "-m", "A"]);
+    // rename a.txt -> b.txt
+    sh(&["mv", "a.txt", "b.txt"]);
+    sh(&["commit", "-q", "-m", "rename a to b"]);
+    // get HEAD name-status
+    let sha = run_git(repo.to_str().unwrap(), &["rev-parse".into(), "HEAD".into()]).unwrap().trim().to_string();
+    let ns = commit_name_status(repo.to_str().unwrap(), &sha).unwrap();
+    // Expect an R status entry with old_path and new file
+    let has_rename = ns.iter().any(|m| m.get("status").unwrap().starts_with('R') && m.get("old_path").is_some());
+    assert!(has_rename, "expected rename entry in name-status");
+  }
 }

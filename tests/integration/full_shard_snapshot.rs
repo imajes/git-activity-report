@@ -1,15 +1,17 @@
-mod common;
-use assert_cmd::Command;
+use test_support;
 
 #[test]
 fn snapshot_first_shard_commit() {
-  let repo = common::fixture_repo();
+  test_support::init_tracing();
+  test_support::init_insta();
+  let _env = test_support::with_env(&[("TZ", "UTC")]);
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
 
-  let out = Command::cargo_bin("git-activity-report")
-    .unwrap()
+  let mut cmd = test_support::cmd_bin("git-activity-report");
+  let out = cmd
     .args([
       "--split-apart",
       "--since",
@@ -21,6 +23,10 @@ fn snapshot_first_shard_commit() {
       "--out",
       out_path,
       "--include-merges",
+      "--tz",
+      "utc",
+      "--now-override",
+      "2025-08-15T12:00:00",
     ])
     .output()
     .unwrap();
@@ -28,15 +34,19 @@ fn snapshot_first_shard_commit() {
   assert!(out.status.success());
   let top: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
   let dir = top["dir"].as_str().unwrap();
-  let manifest = top["manifest"].as_str().unwrap();
-  let manifest_json: serde_json::Value = serde_json::from_slice(&std::fs::read(std::path::Path::new(dir).join(manifest)).unwrap()).unwrap();
+  // Open the per-range report (single split) or overall manifest (multi-range)
+  let pointer = top.get("file").and_then(|v| v.as_str())
+    .or_else(|| top.get("manifest").and_then(|v| v.as_str()))
+    .expect("pointer file or manifest");
+  let pointed_json: serde_json::Value = serde_json::from_slice(
+    &std::fs::read(std::path::Path::new(dir).join(pointer)).unwrap(),
+  ).unwrap();
 
-  let label = manifest_json.get("label").and_then(|v| v.as_str()).unwrap_or("");
-  let items = manifest_json["items"].as_array().unwrap();
+  // In single split mode, shard list is in report.items; in multi-range, items in overall manifest
+  let label = pointed_json.get("label").and_then(|v| v.as_str()).unwrap_or("");
+  let items = pointed_json["items"].as_array().expect("items array");
   let rel = items.first().expect("one shard")["file"].as_str().unwrap();
-  let shard_path1 = std::path::Path::new(dir).join(label).join(rel);
-  let shard_path2 = std::path::Path::new(dir).join(rel);
-  let shard_path = if shard_path1.exists() { shard_path1 } else { shard_path2 };
+  let shard_path = std::path::Path::new(dir).join(label).join(rel);
   let mut v: serde_json::Value = serde_json::from_slice(&std::fs::read(&shard_path).unwrap()).unwrap();
 
   // Redact unstable fields for snapshot stability

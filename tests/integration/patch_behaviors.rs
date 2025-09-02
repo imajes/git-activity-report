@@ -1,9 +1,9 @@
-mod common;
+use test_support;
 use assert_cmd::Command;
 
 #[test]
 fn simple_patch_clipping_sets_flag() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([
@@ -27,7 +27,7 @@ fn simple_patch_clipping_sets_flag() {
 
 #[test]
 fn simple_save_patches_sets_local_path() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let patch_dir = tempfile::TempDir::new().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();

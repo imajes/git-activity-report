@@ -1,0 +1,30 @@
+---
+source: tests/integration/full_manifest_snapshot.rs
+assertion_line: 46
+---
+{
+  "generated_at": "[generated]",
+  "include_merges": true,
+  "include_patch": false,
+  "include_unmerged": true,
+  "ranges": [
+    {
+      "file": "report-2025-07.json",
+      "label": "2025-07",
+      "range": {
+        "since": "2025-07-01T00:00:00",
+        "until": "2025-08-01T00:00:00"
+      }
+    },
+    {
+      "file": "report-2025-08.json",
+      "label": "2025-08",
+      "range": {
+        "since": "2025-08-01T00:00:00",
+        "until": "2025-09-01T00:00:00"
+      }
+    }
+  ],
+  "repo": "<repo>",
+  "split_apart": true
+}

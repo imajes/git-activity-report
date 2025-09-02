@@ -1,4 +1,4 @@
-mod common;
+use test_support;
 use assert_cmd::Command;
 use jsonschema::validator_for;
 
@@ -15,7 +15,7 @@ fn compile_overall_schema() -> jsonschema::Validator {
 
 #[test]
 fn overall_manifest_schema_validates_and_files_exist() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
@@ -62,7 +62,7 @@ fn overall_manifest_schema_validates_and_files_exist() {
 
 #[test]
 fn simple_overall_manifest_writes_files() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();

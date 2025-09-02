@@ -10,6 +10,7 @@
 /tests/.tmp/
 /tests/tests/
 /tests/fixtures/full_out/
+/tests/support/target
 
 # OS/editor cruft
 .DS_Store

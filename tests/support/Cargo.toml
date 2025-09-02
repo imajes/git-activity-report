@@ -1,0 +1,40 @@
+[package]
+name = "test_support"
+version = "0.1.0"
+edition = "2021"
+description = "Shared test helpers for integration/unit tests (nextest-friendly)."
+license = "MIT"
+publish = false
+
+[lib]
+# Library crate name used in `use` paths is underscore, e.g., `use test_support::...;`
+name = "test_support"
+path = "src/lib.rs"
+
+[features]
+# Opt-in helpers for async tests using Tokio
+tokio = ["dep:tokio", "dep:tokio-util"]
+# Enable serde-based fixture loaders
+serde = ["dep:serde", "dep:serde_json"]
+
+[dependencies]
+once_cell = "1"
+tempfile = "3"
+assert_fs = "1"
+assert_cmd = "2"
+predicates = "3"
+camino = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+insta = { version = "1.43.1", features = ["json", "redactions"] }
+
+# Optional deps
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "test-util",
+], optional = true }
+tokio-util = { version = "0.7", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }

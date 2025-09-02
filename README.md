@@ -16,6 +16,11 @@ Export Git activity into structured JSON — either a single report or a split�
 - **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
 Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
 
+## License
+
+- Source code in this repository is licensed under the MIT License (see [LICENSE](./LICENSES/MIT.txt)).
+- While they are present here, Documentation and Markdown files are not open source; they are © 2025 James Cox, All Rights Reserved (see [LICENSE](./LICENSES/LicenseRef-AllRightsReserved.txt)).
+
 ## Install / Run
 
 - Local run (from this repo):

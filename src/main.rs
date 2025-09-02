@@ -17,21 +17,20 @@ use anyhow::Result;
 use clap::Parser;
 
 mod cli;
+mod commit;
 mod enrich;
 mod enrichment;
-mod commit;
 mod ext;
 mod gitio;
-mod model;
 mod manifest;
-mod range_processor;
+mod model;
 mod params;
+mod range_processor;
+mod range_windows;
 mod render;
 mod util;
-mod range_windows;
 
 use crate::cli::{Cli, normalize};
-
 
 fn main() -> Result<()> {
   let cli = Cli::parse();

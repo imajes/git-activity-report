@@ -1,4 +1,4 @@
-mod common;
+use test_support;
 use assert_cmd::Command;
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use regex::Regex;
@@ -38,13 +38,13 @@ fn last_month_bounds(now: chrono::DateTime<Local>) -> (String, String) {
 
 #[test]
 fn many_for_phrases_should_match_expected_ranges() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
 
   // Freeze "now" for deterministic expectations in both CLI and our math
   let fixed_now_str = "2025-08-15T12:00:00";
   // Pin TZ to UTC to avoid local variance
-  std::env::set_var("TZ", "UTC");
+  let _env = test_support::with_env(&[("TZ", "UTC")]);
   let fixed_now = NaiveDateTime::parse_from_str(fixed_now_str, "%Y-%m-%dT%H:%M:%S")
     .unwrap()
     .and_local_timezone(Local)

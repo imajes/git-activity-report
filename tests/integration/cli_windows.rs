@@ -1,5 +1,5 @@
+use test_support;
 use assert_cmd::Command;
-mod common;
 
 #[test]
 fn errors_when_no_time_selection() {
@@ -13,7 +13,7 @@ fn errors_when_no_time_selection() {
 
 #[test]
 fn for_phrase_last_week_simple_smoke() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args(["--for", "last week", "--repo", repo_path, "--tz", "utc"]);
@@ -34,7 +34,7 @@ fn month_simple_smoke() {
 
 #[test]
 fn full_mode_accepts_out_dir() {
-  let repo = common::init_fixture_repo();
+  let repo = test_support::init_fixture_repo();
   let repo_path = repo.path().to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
   cmd.args([

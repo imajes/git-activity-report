@@ -1,9 +1,9 @@
-mod common;
+use test_support;
 use assert_cmd::Command;
 
 #[test]
 fn simple_mode_outputs_expected_shape() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let mut cmd = Command::cargo_bin("git-activity-report").unwrap();
 
@@ -34,7 +34,7 @@ fn simple_mode_outputs_expected_shape() {
 
 #[test]
 fn simple_mode_writes_to_file_and_validates_shape() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let tmpdir = tempfile::TempDir::new().unwrap();
   let outfile = tmpdir.path().join("out.json");

@@ -1,0 +1,45 @@
+---
+source: tests/integration/full_shard_snapshot.rs
+assertion_line: 72
+expression: v
+---
+{
+  "author": {
+    "date": "2025-08-12T14:03:00-05:00",
+    "email": "fixture@example.com",
+    "name": "Fixture Bot"
+  },
+  "body": "",
+  "committer": {
+    "date": "Tue, 12 Aug 2025 14:03:00 -0500",
+    "email": "fixture@example.com",
+    "name": "Fixture Bot"
+  },
+  "diffstat_text": "1 file changed, 1 insertion(+)",
+  "files": [
+    {
+      "additions": 1,
+      "deletions": 0,
+      "file": "app/models/user.rb",
+      "status": "A"
+    }
+  ],
+  "parents": [],
+  "patch_ref": {
+    "embed": false,
+    "git_show_cmd": "[git-show]",
+    "github_diff_url": null,
+    "github_patch_url": null,
+    "local_patch_file": null
+  },
+  "sha": "[sha]",
+  "short_sha": "[short]",
+  "subject": "feat: add user model",
+  "timestamps": {
+    "author": 0,
+    "author_local": "[local]",
+    "commit": 0,
+    "commit_local": "[local]",
+    "timezone": "utc"
+  }
+}

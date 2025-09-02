@@ -1,9 +1,9 @@
-mod common;
+use test_support;
 use assert_cmd::Command;
 
 #[test]
 fn full_mode_writes_manifest_and_shards_with_unmerged() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
@@ -79,7 +79,7 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
 
 #[test]
 fn full_mode_month_label_and_manifest_filename() {
-  let repo = common::fixture_repo();
+  let repo = test_support::fixture_repo();
   let repo_path = repo.to_str().unwrap();
   let outdir = tempfile::TempDir::new().unwrap();
   let out_path = outdir.path().to_str().unwrap();
