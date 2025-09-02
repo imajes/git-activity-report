@@ -46,9 +46,11 @@ fn main() -> Result<()> {
 
   // Phase 2: resolve now and ranges
   let now_opt = crate::range_windows::parse_now(cfg.now_override.as_deref());
+  eprintln!("[gar] resolving ranges...");
   let ranges = crate::range_windows::resolve_ranges(&cfg.window, now_opt)?;
   cfg.multi_windows = ranges.len() > 1;
 
   // Phase 3: process ranges (single or multi) in a unified flow
+  eprintln!("[gar] processing {} range(s)...", ranges.len());
   crate::range_processor::process_ranges(&cfg, ranges, now_opt)
 }

@@ -44,10 +44,10 @@ impl OverallManifest {
     Self { value: v }
   }
 
-  pub fn push_simple_entry(&mut self, label: String, since: String, until: String, file_path: &str) {
+  pub fn push_simple_entry(&mut self, label: String, start: String, end: String, file_path: &str) {
     let entry = serde_json::json!({
       "label": label,
-      "range": {"since": since, "until": until},
+      "range": {"start": start, "end": end},
       "file": file_path,
     });
     self.value["ranges"].as_array_mut().unwrap().push(entry);
@@ -67,8 +67,8 @@ impl OverallManifest {
 
 pub struct RangeEntry {
   pub label: String,
-  pub since: String,
-  pub until: String,
+  pub start: String,
+  pub end: String,
   pub file: String,
 }
 
@@ -92,7 +92,7 @@ pub fn write_overall_manifest(
     include_unmerged,
   );
   for e in entries {
-    overall.push_simple_entry(e.label.clone(), e.since.clone(), e.until.clone(), &e.file);
+    overall.push_simple_entry(e.label.clone(), e.start.clone(), e.end.clone(), &e.file);
   }
   overall.write_to(base_dir)
 }
@@ -111,8 +111,8 @@ mod tests {
       .single()
       .unwrap();
     let entries = vec![
-      RangeEntry { label: "2025-07".into(), since: "2025-07-01T00:00:00".into(), until: "2025-08-01T00:00:00".into(), file: "report-2025-07.json".into() },
-      RangeEntry { label: "2025-08".into(), since: "2025-08-01T00:00:00".into(), until: "2025-09-01T00:00:00".into(), file: "report-2025-08.json".into() },
+      RangeEntry { label: "2025-07".into(), start: "2025-07-01T00:00:00".into(), end: "2025-08-01T00:00:00".into(), file: "report-2025-07.json".into() },
+      RangeEntry { label: "2025-08".into(), start: "2025-08-01T00:00:00".into(), end: "2025-09-01T00:00:00".into(), file: "report-2025-08.json".into() },
     ];
     let path = write_overall_manifest(
       "<repo>",
