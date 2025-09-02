@@ -18,6 +18,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
+use chrono_tz::Tz;
 use clap::CommandFactory;
 
 pub fn canonicalize_lossy<P: AsRef<Path>>(p: P) -> String {
@@ -53,13 +54,23 @@ pub fn short_sha(full: &str) -> String {
 }
 
 /// Formats a Unix epoch timestamp into an RFC3339 string in the specified timezone.
-pub fn iso_in_tz(epoch: i64, tz_local: bool) -> String {
-  if tz_local {
+pub fn iso_in_tz(epoch: i64, tz: &str) -> String {
+  if tz.eq_ignore_ascii_case("local") {
     let dt = Local.timestamp_opt(epoch, 0).single().unwrap();
-    dt.to_rfc3339_opts(SecondsFormat::Secs, true)
-  } else {
+    return dt.to_rfc3339_opts(SecondsFormat::Secs, true);
+  }
+
+  if tz.eq_ignore_ascii_case("utc") {
     let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
-    dt.to_rfc3339_opts(SecondsFormat::Secs, true)
+    return dt.to_rfc3339_opts(SecondsFormat::Secs, true);
+  }
+
+  let dt_utc = Utc.timestamp_opt(epoch, 0).single().unwrap();
+  match tz.parse::<Tz>() {
+    Ok(zone) => zone
+      .from_utc_datetime(&dt_utc.naive_utc())
+      .to_rfc3339_opts(SecondsFormat::Secs, true),
+    Err(_) => dt_utc.to_rfc3339_opts(SecondsFormat::Secs, true),
   }
 }
 
@@ -139,10 +150,10 @@ mod tests {
   #[test]
   fn iso_formats_utc_and_local() {
     // 2024-09-12T00:30:00Z (epoch 1726101000)
-    let iso_utc = iso_in_tz(1_726_101_000, false);
+    let iso_utc = iso_in_tz(1_726_101_000, "utc");
     assert!(iso_utc.ends_with('Z'));
 
-    let iso_local = iso_in_tz(1_726_101_000, true);
+    let iso_local = iso_in_tz(1_726_101_000, "local");
     assert!(iso_local.ends_with('Z') || iso_local.contains('+') || iso_local.contains('-'));
   }
 
@@ -201,19 +212,29 @@ mod tests {
 
   #[test]
   fn shard_name_utc_has_expected_pattern() {
-    let name = super::format_shard_name(1_726_161_400, "abcdef123456", false); // 2024-09-12...
+    let name = super::format_shard_name(1_726_161_400, "abcdef123456", "utc"); // 2024-09-12...
     assert!(name.ends_with("-abcdef123456.json"));
     assert_eq!(name.len(), "YYYY.MM.DD-HH.MM-abcdef123456.json".len());
   }
 }
 
 /// Formats a file name for a commit shard based on its timestamp and SHA.
-pub fn format_shard_name(epoch: i64, short_sha: &str, tz_local: bool) -> String {
-  if tz_local {
+pub fn format_shard_name(epoch: i64, short_sha: &str, tz: &str) -> String {
+  if tz.eq_ignore_ascii_case("local") {
     let dt = Local.timestamp_opt(epoch, 0).single().unwrap();
+    return format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha);
+  }
+
+  if tz.eq_ignore_ascii_case("utc") {
+    let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
+    return format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha);
+  }
+
+  let dt_utc = Utc.timestamp_opt(epoch, 0).single().unwrap();
+  if let Ok(zone) = tz.parse::<Tz>() {
+    let dt = zone.from_utc_datetime(&dt_utc.naive_utc());
     format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)
   } else {
-    let dt = Utc.timestamp_opt(epoch, 0).single().unwrap();
-    format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)
+    format!("{}-{}-{}.json", dt_utc.format("%Y.%m.%d"), dt_utc.format("%H.%M"), short_sha)
   }
 }
