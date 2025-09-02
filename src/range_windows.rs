@@ -16,19 +16,13 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Datelike, Local, NaiveDate, Timelike};
 use chrono_english::{Interval, parse_duration};
-use clap::ValueEnum;
+ 
 use serde::{Deserialize, Serialize};
 use two_timer::parse as parse_natural;
 
 // Windowing-related types live here to keep main focused.
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-#[value(rename_all = "lowercase")]
-pub enum Tz {
-  Local,
-  Utc,
-}
+// Tz enum removed in favor of free-form tz strings ("local", "utc", or IANA zone)
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum WindowSpec {
