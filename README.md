@@ -14,7 +14,7 @@ Export Git activity into structured JSON — either a single report or a split�
 - **Optional GitHub PR enrichment**: attaches PR metadata and `.diff`/`.patch` links when available (quietly skipped if unauthenticated).
 - **Optional unmerged branch scan**: include commits in the window that are **not** reachable from `HEAD` (in‑flight work), grouped by local branch.
 - **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
-Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
+  Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
 
 ## License
 
@@ -97,18 +97,6 @@ git activity-report --split-apart --for "last month" \
 - Timezone label: `--tz local|utc` (default `local`)
 
 ## Output structure
-
-- **Timestamps** live inside each commit’s `timestamps` block:
-
-  ```json
-  {
-    "author": 1693512345,
-    "commit": 1693516789,
-    "author_local": "2025-08-31T10:05:45-05:00",
-    "commit_local": "2025-08-31T11:19:49-05:00",
-    "timezone": "local"
-  }
-  ```
 
 - **Single report**: one JSON object with `commits[]` and optional `unmerged_activity`.
 - **Split‑apart**: `report-<label>.json` (per‑range) with `items[]` pointing to `YYYY.MM.DD-HH.MM-<shortsha>.json` shard files; for multi‑range runs, an overall `manifest.json` indexes the per‑range reports.

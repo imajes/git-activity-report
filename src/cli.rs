@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::util;
-use crate::range_windows::{Tz, WindowSpec};
+use crate::range_windows::WindowSpec;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -88,8 +88,9 @@ pub struct Cli {
   pub include_unmerged: bool,
 
   /// Timezone for local ISO timestamps in output (label only)
-  #[arg(long, value_enum, default_value_t = Tz::Local)]
-  pub tz: Tz,
+  /// Timezone for local ISO timestamps in output: "local", "utc", or IANA zone like "America/Chicago"
+  #[arg(long, default_value = "local")]
+  pub tz: String,
 
   /// Emit a troff man page to stdout (internal; for packaging)
   #[arg(long, hide = true)]
@@ -113,7 +114,7 @@ pub struct EffectiveConfig {
   pub out: String,
   pub github_prs: bool,
   pub include_unmerged: bool,
-  pub tz: Tz,
+  pub tz: String,
   pub now_override: Option<String>,
 }
 
@@ -154,7 +155,7 @@ pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     out: cli.out,
     github_prs,
     include_unmerged,
-    tz: cli.tz,
+    tz: cli.tz.clone(),
     now_override: cli.now_override.clone(),
   })
 }
@@ -180,7 +181,7 @@ mod tests {
       out: "-".into(),
       github_prs: false,
       include_unmerged: false,
-      tz: Tz::Utc,
+      tz: "utc".into(),
       gen_man: false,
       now_override: None,
     }
