@@ -22,7 +22,7 @@ pub struct Timestamps {
   pub commit: i64,
   pub author_local: String,
   pub commit_local: String,
-  pub timezone: String, // "local" | "utc"
+  pub timezone: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -38,12 +38,23 @@ pub struct FileEntry {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PatchRef {
+pub struct PatchReferencesGithub {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub commit_url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub diff_url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub patch_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatchReferences {
   pub embed: bool,
   pub git_show_cmd: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub local_patch_file: Option<String>,
-  pub github_diff_url: Option<String>,
-  pub github_patch_url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub github: Option<PatchReferencesGithub>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -58,50 +69,70 @@ pub struct Commit {
   pub body: String,
   pub files: Vec<FileEntry>,
   pub diffstat_text: String,
-  pub patch_ref: PatchRef,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub patch: Option<String>,
+  pub patch_references: PatchReferences,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub patch_clipped: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub github_prs: Option<Vec<GithubPullRequest>>,
+  pub patch_lines: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub body_lines: Option<Vec<String>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub github: Option<CommitGithub>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Summary {
+pub struct ChangeSet {
   pub additions: i64,
   pub deletions: i64,
   pub files_touched: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SimpleReport {
-  pub repo: String,
-  pub range: Range,
+pub struct ReportOptions {
   pub include_merges: bool,
   pub include_patch: bool,
-  pub count: usize,
-  pub authors: std::collections::BTreeMap<String, i64>,
-  pub summary: Summary,
-  pub commits: Vec<Commit>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub pull_requests: Option<Vec<GithubPullRequest>>, // aggregated PRs across commits
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub items: Option<Vec<ManifestItem>>, // present when split-apart
+  pub include_unmerged: bool,
+  pub tz: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Range {
-  pub since: String,
-  pub until: String,
+pub struct RangeInfo {
+  pub label: String,
+  pub start: String,
+  pub end: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReportSummary {
+  pub repo: String,
+  pub range: RangeInfo,
+  pub count: usize,
+  pub report_options: ReportOptions,
+  #[serde(rename = "changeset")]
+  pub changes: ChangeSet,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimpleReport {
+  pub summary: ReportSummary,
+  pub authors: std::collections::BTreeMap<String, i64>,
+  pub commits: Vec<Commit>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub items: Option<Vec<ManifestItem>>, // present when split-apart
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub unmerged_activity: Option<UnmergedActivity>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GithubUser {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub login: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub profile_url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub r#type: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub email: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -110,7 +141,7 @@ pub struct GithubPullRequest {
   pub title: String,
   pub state: String,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub body: Option<String>,
+  pub body_lines: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub created_at: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,11 +154,11 @@ pub struct GithubPullRequest {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub patch_url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub user: Option<GithubUser>,
-  #[serde(skip_serializing_if = "Option::is_none")]
   pub submitter: Option<GithubUser>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub approver: Option<GithubUser>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub reviewers: Option<Vec<GithubUser>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub head: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -169,14 +200,18 @@ pub struct UnmergedActivity {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RangeManifest {
   pub label: Option<String>,
-  pub range: Range,
+  pub range: RangeInfo,
   pub repo: String,
-  pub include_merges: bool,
-  pub include_patch: bool,
   pub count: usize,
   pub authors: std::collections::BTreeMap<String, i64>,
-  pub summary: Summary,
+  pub changeset: ChangeSet,
   pub items: Vec<ManifestItem>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub unmerged_activity: Option<UnmergedActivity>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommitGithub {
+  #[serde(skip_serializing_if = "Vec::is_empty", default)]
+  pub pull_requests: Vec<GithubPullRequest>,
 }
