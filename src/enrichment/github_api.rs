@@ -76,6 +76,7 @@ pub trait GithubApi {
   fn list_pulls_for_commit_json(&self, owner: &str, name: &str, sha: &str) -> Option<serde_json::Value>;
   fn get_pull_details_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
   fn list_commits_in_pull(&self, owner: &str, name: &str, number: i64) -> Vec<PullRequestCommit>;
+  fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
 }
 
 struct GithubHttpApi {
@@ -127,6 +128,14 @@ impl GithubApi for GithubHttpApi {
 
     out
   }
+
+  fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
+    let url = format!(
+      "https://api.github.com/repos/{}/{}/pulls/{}/reviews",
+      owner, name, number
+    );
+    get_json(&url, &self.token)
+  }
 }
 
 struct GithubEnvApi;
@@ -164,6 +173,14 @@ impl GithubApi for GithubEnvApi {
     }
 
     out
+  }
+
+  fn list_reviews_for_pull_json(&self, _owner: &str, _name: &str, _number: i64) -> Option<serde_json::Value> {
+    if let Ok(s) = std::env::var("GAR_TEST_PR_REVIEWS_JSON") {
+      serde_json::from_str::<serde_json::Value>(&s).ok()
+    } else {
+      None
+    }
   }
 }
 
@@ -232,6 +249,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     let html = pr_json.fetch("html_url").to_or_default::<String>();
     let user_login = pr_json.fetch("user.login").to::<String>();
     let user = user_login.map(|login| GithubUser { login: Some(login) });
+    let submitter = user.clone();
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -255,6 +273,8 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
         Some(format!("{}.patch", html))
       },
       user,
+      submitter,
+      approver: None,
       head,
       base,
       commits: None,

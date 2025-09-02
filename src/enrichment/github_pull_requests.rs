@@ -56,6 +56,7 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
     let html_url = pr_json.fetch("html_url").to_or_default::<String>();
     let user_login = pr_json.fetch("user.login").to::<String>();
     let user = user_login.map(|login| crate::model::GithubUser { login: Some(login) });
+    let submitter = user.clone();
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -74,6 +75,8 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
       diff_url,
       patch_url,
       user,
+      submitter,
+      approver: None,
       head,
       base,
       commits: None,
@@ -162,6 +165,34 @@ pub fn collect_pull_requests_for_commits_with_api(
       let body = pr_json.fetch("body").to::<String>();
       let user_login = pr_json.fetch("user.login").to::<String>();
       let user = user_login.map(|login| crate::model::GithubUser { login: Some(login) });
+      let submitter = user.clone();
+      // Determine approver: prefer latest APPROVED review; fallback to merged_by
+      let mut approver = None;
+      if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
+        if let Some(arr) = reviews_json.as_array() {
+          let mut latest_idx: Option<usize> = None;
+          let mut latest_ts: Option<String> = None;
+          for (i, r) in arr.iter().enumerate() {
+            let state = r.fetch("state").to_or_default::<String>();
+            if state.eq_ignore_ascii_case("APPROVED") {
+              let ts = r.fetch("submitted_at").to::<String>();
+              match (&latest_ts, ts.as_ref()) {
+                (Some(cur), Some(new_ts)) => { if new_ts > cur { latest_ts = Some(new_ts.clone()); latest_idx = Some(i); } }
+                (None, Some(new_ts)) => { latest_ts = Some(new_ts.clone()); latest_idx = Some(i); }
+                _ => { latest_idx = Some(i); }
+              }
+            }
+          }
+          if let Some(i) = latest_idx {
+            let login = arr[i].fetch("user.login").to::<String>();
+            approver = login.map(|l| crate::model::GithubUser { login: Some(l) });
+          }
+        }
+      }
+      if approver.is_none() {
+        let merged_by_login = pr_json.fetch("merged_by.login").to::<String>();
+        approver = merged_by_login.map(|login| crate::model::GithubUser { login: Some(login) });
+      }
       let head = pr_json.fetch("head.ref").to::<String>();
       let base = pr_json.fetch("base.ref").to::<String>();
 
@@ -180,6 +211,8 @@ pub fn collect_pull_requests_for_commits_with_api(
         diff_url,
         patch_url,
         user,
+        submitter,
+        approver,
         head,
         base,
         commits: Some(pr_commits),
@@ -234,6 +267,8 @@ mod tests {
       diff_url: None,
       patch_url: None,
       user: None,
+      submitter: None,
+      approver: None,
       head: None,
       base: None,
       commits: None,
@@ -260,6 +295,11 @@ mod tests {
     enrich_with_github_prs(&mut c, repo);
     assert!(c.github_prs.as_ref().unwrap().len() >= 1);
     assert_eq!(c.patch_ref.github_diff_url.as_deref(), Some("https://github.com/openai/example/pull/10.diff"));
+    // Submitter mirrors user; approver not available from list endpoint
+    let pr0 = &c.github_prs.as_ref().unwrap()[0];
+    assert_eq!(pr0.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr0.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert!(pr0.approver.is_none());
     std::env::remove_var("GITHUB_TOKEN");
     std::env::remove_var("GAR_TEST_PR_JSON");
   }
@@ -274,6 +314,7 @@ mod tests {
       "title": "Add feature",
       "state": "closed",
       "user": {"login": "octo"},
+      "merged_by": {"login": "marge"},
       "head": {"ref": "feature/x"},
       "base": {"ref": "main"},
       "created_at": "2024-01-01T00:00:00Z",
@@ -290,10 +331,60 @@ mod tests {
     assert_eq!(pr.number, 1);
     assert_eq!(pr.title, "Add feature");
     assert_eq!(pr.user.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(pr.approver.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("marge"));
     assert_eq!(pr.commits.as_ref().unwrap()[0].short_sha.len(), 7);
     std::env::remove_var("GITHUB_TOKEN");
     std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
     std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
+  }
+
+  #[test]
+  #[serial]
+  fn aggregates_pull_requests_approver_from_reviews() {
+    std::env::set_var("GITHUB_TOKEN", "x");
+    // PR details without merged_by → approver should be taken from reviews
+    std::env::set_var(
+      "GAR_TEST_PULL_DETAILS_JSON",
+      serde_json::json!({
+        "html_url": "https://github.com/openai/example/pull/2",
+        "number": 2,
+        "title": "Refactor",
+        "state": "closed",
+        "user": {"login": "submit"},
+        "head": {"ref": "refactor/x"},
+        "base": {"ref": "main"},
+        "created_at": "2024-02-01T00:00:00Z",
+        "closed_at": "2024-02-02T00:00:00Z",
+        "merged_at": "2024-02-02T00:00:00Z"
+      })
+      .to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_REVIEWS_JSON",
+      serde_json::json!([
+        {"state": "COMMENTED", "user": {"login": "x"}, "submitted_at": "2024-02-01T01:00:00Z"},
+        {"state": "APPROVED", "user": {"login": "alice"}, "submitted_at": "2024-02-01T02:00:00Z"},
+        {"state": "APPROVED", "user": {"login": "bob"}, "submitted_at": "2024-02-01T03:00:00Z"}
+      ])
+      .to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_COMMITS_JSON",
+      serde_json::json!([{ "sha": "abc1234", "commit": {"message": "Subject\nBody"}}]).to_string(),
+    );
+    let td = init_git_repo_with_origin();
+    let repo = td.path().to_str().unwrap();
+    let commits = vec![minimal_commit_with_pr(2)];
+    let out = collect_pull_requests_for_commits(&commits, repo).unwrap();
+    assert_eq!(out.len(), 1);
+    let pr = &out[0];
+    assert_eq!(pr.approver.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("bob"));
+
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
+    std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
+    std::env::remove_var("GAR_TEST_PR_REVIEWS_JSON");
   }
 
   #[test]

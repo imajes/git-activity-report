@@ -141,6 +141,8 @@
         "diff_url": { "type": ["string", "null"] },
         "patch_url": { "type": ["string", "null"] },
         "user": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
+        "submitter": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
+        "approver": { "type": "object", "properties": { "login": { "type": ["string", "null"] } }, "additionalProperties": true },
         "head": { "type": ["string", "null"] },
         "base": { "type": ["string", "null"] }
       },
@@ -169,4 +171,3 @@
     }
   }
 }
-

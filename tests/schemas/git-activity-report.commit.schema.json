@@ -246,6 +246,30 @@
             },
             "additionalProperties": true
           },
+          "submitter": {
+            "type": "object",
+            "properties": {
+              "login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
+          "approver": {
+            "type": "object",
+            "properties": {
+              "login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
           "head": {
             "type": [
               "string",

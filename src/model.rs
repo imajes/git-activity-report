@@ -125,6 +125,10 @@ pub struct GithubPullRequest {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub user: Option<GithubUser>,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub submitter: Option<GithubUser>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub approver: Option<GithubUser>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub head: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub base: Option<String>,
