@@ -12,14 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies (markdownlint optional)
+      - name: Install dependencies (bash, ripgrep)
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y bash
+          sudo apt-get install -y bash ripgrep
 
       - name: Cycle presence check
         run: bash scripts/check_cycle_presence.sh
 
       - name: Module headers check
         run: bash scripts/check_module_headers.sh
-
