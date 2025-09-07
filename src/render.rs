@@ -222,11 +222,7 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
 // --- `run_full` Sub-logic ---
 
 /// Helper for `run_full` to process the main list of commits.
-fn process_commit_range(
-  params: &ReportParams,
-  subdir: &Path,
-  label: &str,
-) -> Result<ProcessRangeOut> {
+fn process_commit_range(params: &ReportParams, subdir: &Path, label: &str) -> Result<ProcessRangeOut> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
