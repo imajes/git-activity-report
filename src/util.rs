@@ -66,6 +66,7 @@ pub fn iso_in_tz(epoch: i64, tz: &str) -> String {
   }
 
   let dt_utc = Utc.timestamp_opt(epoch, 0).single().unwrap();
+
   match tz.parse::<Tz>() {
     Ok(zone) => zone
       .from_utc_datetime(&dt_utc.naive_utc())
@@ -134,6 +135,14 @@ pub fn render_man_page<T: CommandFactory>() -> anyhow::Result<String> {
 }
 
 // JSON extension helpers are in `crate::ext::serde_json`.
+
+/// Compute the difference in seconds between two RFC3339 timestamps.
+/// Returns None when either timestamp cannot be parsed.
+pub fn diff_seconds(start_iso: &str, end_iso: &str) -> Option<i64> {
+  let ps = chrono::DateTime::parse_from_rfc3339(start_iso).ok()?;
+  let pe = chrono::DateTime::parse_from_rfc3339(end_iso).ok()?;
+  Some((pe - ps).num_seconds())
+}
 
 #[cfg(test)]
 mod tests {
@@ -228,6 +237,7 @@ pub fn format_shard_name(epoch: i64, short_sha: &str, tz: &str) -> String {
   }
 
   let dt_utc = Utc.timestamp_opt(epoch, 0).single().unwrap();
+
   if let Ok(zone) = tz.parse::<Tz>() {
     let dt = zone.from_utc_datetime(&dt_utc.naive_utc());
     format!("{}-{}-{}.json", dt.format("%Y.%m.%d"), dt.format("%H.%M"), short_sha)

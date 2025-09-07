@@ -102,3 +102,67 @@ fn simple_overall_manifest_writes_files() {
     assert!(p.exists(), "range file path should exist");
   }
 }
+
+#[test]
+fn overall_manifest_accepts_each_synonym_and_spelled_numbers_months() {
+  let repo = test_support::fixture_repo();
+  let repo_path = repo.to_str().unwrap();
+  let outdir = tempfile::TempDir::new().unwrap();
+  let out_path = outdir.path().to_str().unwrap();
+
+  let out = Command::cargo_bin("git-activity-report")
+    .unwrap()
+    .args([
+      "--for",
+      "each month for the last six months",
+      "--repo",
+      repo_path,
+      "--out",
+      out_path,
+    ])
+    .output()
+    .unwrap();
+
+  assert!(
+    out.status.success(),
+    "cli run failed: {}",
+    String::from_utf8_lossy(&out.stderr)
+  );
+  let top_ptr: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+  let dir = top_ptr["dir"].as_str().expect("dir string");
+  let manifest_file = top_ptr["manifest"].as_str().expect("manifest string");
+  let top_json_path = std::path::Path::new(dir).join(manifest_file);
+  assert!(top_json_path.exists(), "top manifest should exist");
+}
+
+#[test]
+fn overall_manifest_accepts_each_synonym_and_spelled_numbers_weeks() {
+  let repo = test_support::fixture_repo();
+  let repo_path = repo.to_str().unwrap();
+  let outdir = tempfile::TempDir::new().unwrap();
+  let out_path = outdir.path().to_str().unwrap();
+
+  let out = Command::cargo_bin("git-activity-report")
+    .unwrap()
+    .args([
+      "--for",
+      "each week for the last twelve weeks",
+      "--repo",
+      repo_path,
+      "--out",
+      out_path,
+    ])
+    .output()
+    .unwrap();
+
+  assert!(
+    out.status.success(),
+    "cli run failed: {}",
+    String::from_utf8_lossy(&out.stderr)
+  );
+  let top_ptr: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+  let dir = top_ptr["dir"].as_str().expect("dir string");
+  let manifest_file = top_ptr["manifest"].as_str().expect("manifest string");
+  let top_json_path = std::path::Path::new(dir).join(manifest_file);
+  assert!(top_json_path.exists(), "top manifest should exist");
+}

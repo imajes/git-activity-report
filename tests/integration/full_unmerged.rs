@@ -36,8 +36,14 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   assert!(range["start"].as_str().unwrap().starts_with("2025-08-01"));
   assert!(range["end"].as_str().unwrap().starts_with("2025-09-01"));
   assert!(mf["summary"]["repo"].as_str().is_some());
-  assert_eq!(mf["summary"]["report_options"]["include_merges"].as_bool().unwrap(), true);
-  assert_eq!(mf["summary"]["report_options"]["include_patch"].as_bool().unwrap(), false);
+  assert_eq!(
+    mf["summary"]["report_options"]["include_merges"].as_bool().unwrap(),
+    true
+  );
+  assert_eq!(
+    mf["summary"]["report_options"]["include_patch"].as_bool().unwrap(),
+    false
+  );
   assert!(mf["summary"]["count"].as_u64().unwrap() >= 1);
   assert!(mf["authors"].is_object());
   let summary_changes = &mf["summary"]["changeset"];
@@ -71,7 +77,10 @@ fn full_mode_writes_manifest_and_shards_with_unmerged() {
   assert!(c["sha"].as_str().is_some());
   assert!(c["timestamps"]["timezone"].as_str().is_some());
   assert!(
-    c["patch_references"]["git_show_cmd"].as_str().unwrap().starts_with("git show")
+    c["patch_references"]["git_show_cmd"]
+      .as_str()
+      .unwrap()
+      .starts_with("git show")
   );
   if let Some(f0) = c["files"].as_array().and_then(|a| a.first()) {
     assert!(f0["file"].as_str().is_some());

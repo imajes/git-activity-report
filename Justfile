@@ -15,20 +15,21 @@ RUST_BIN := "target/debug/git-activity-report"
 _help:
   @echo "Recipes:"
   @echo "  build         # cargo build"
+  @echo "  check-headers # verify module headers have purpose/role"
+  @echo "  ci-check      # verify cycle presence and headers (CI gate)"
+  @echo "  clean         # Clean build objects and data"
+  @echo "  clippy        # cargo clippy -D warnings"
+  @echo "  fmt           # cargo fmt --check"
+  @echo "  fmt-fix       # cargo fmt"
+  @echo "  help          # print Rust CLI --help (builds first)"
   @echo "  install       # build release and copy binary to ~/bin"
   @echo "  man           # generate man page to docs/man/git-activity-report.1"
   @echo "  man-install   # install man page to ~/.local/share/man/man1"
-  @echo "  test          # cargo test"
-  @echo "  fmt           # cargo fmt --check"
-  @echo "  fmt-fix       # cargo fmt"
-  @echo "  clippy        # cargo clippy -D warnings"
-  @echo "  help          # print Rust CLI --help (builds first)"
-  @echo "  run-simple    # sample run of Rust CLI (prints normalized config)"
-  @echo "  run-full      # sample full-mode run (config print for now)"
-  @echo "  test          # run tests (nextest + coverage + schema validation)"
   @echo "  new-cycle     # scaffold a new agent cycle log"
-  @echo "  check-headers # verify module headers have purpose/role"
-  @echo "  ci-check      # verify cycle presence and headers (CI gate)"
+  @echo "  run-full      # sample full-mode run (config print for now)"
+  @echo "  run-simple    # sample run of Rust CLI (prints normalized config)"
+  @echo "  test          # run tests (nextest + coverage + schema validation)"
+
 
 doctor:
   set +e
@@ -43,6 +44,9 @@ build:
 
 test:
   cargo llvm-cov nextest
+
+clean:
+  cargo clean
 
 test-all:
   cargo llvm-cov nextest --max-fail 100000

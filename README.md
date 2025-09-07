@@ -4,7 +4,7 @@ Export Git activity into structured JSON — either a single report or a split�
 
 ## Features
 
-- **Natural language time windows**: `--for "last week"`, `--for "every month for the last 6 months"`, or `--month YYYY-MM`, or explicit `--since/--until` (Git approxidate supported).
+- **Natural language time windows**: `--for "last week"`, `--for "every month for the last 6 months"` (also `each` and spelled numbers like "six"/"twelve"), or `--month YYYY-MM`, or explicit `--since/--until` (Git approxidate supported).
 - **Local‑time timestamps** by default: each commit carries epoch seconds and local ISO strings with offsets.
 - **Two output styles**:
 
@@ -77,7 +77,7 @@ git activity-report --split-apart --for "last month" \
 - Time range (pick one):
 
   - `--month YYYY-MM`
-  - `--for "last week" | "last month" | "every month for the last N months" | "every week for the last N weeks"`
+  - `--for "last week" | "last month" | "every|each month for the last N months" | "every|each week for the last N weeks"` (N can be an integer or a small spelled number 1–12)
   - `--since <approxidate>` and `--until <approxidate>` (aliases: `--start` / `--end`)
 
 - Output:
@@ -110,8 +110,19 @@ git activity-report --split-apart --for "last month" \
 ## GitHub PR enrichment
 
 - Enable with `--github-prs`.
-- If `GITHUB_TOKEN` or `gh` auth is available, commit objects will include `github_prs[]` with `number`, `title`, `state`, `created_at`, `merged_at`, `html_url`, and convenience `diff_url`/`patch_url`.
+- If `GITHUB_TOKEN` or `gh` auth is available, commit objects will include `github.pull_requests[]` with `number`, `title`, `state`, `created_at`, `merged_at`, `html_url`, and convenience `diff_url`/`patch_url`.
 - If unavailable or rate‑limited, enrichment is skipped silently.
+
+User fields and classification (best‑effort):
+
+- `submitter`, `approver`, and `reviewers[]` are `GithubUser` objects with:
+  - `login`, `profile_url`, `email` (from user profile when public; we may also infer submitter emails from PR commits), and `type`.
+  - `type` maps to: `bot` (login ends with `[bot]` or GitHub type `Bot`), `member` (author_association OWNER/MEMBER/COLLABORATOR), `contributor` (CONTRIBUTOR/FIRST_TIME_CONTRIBUTOR/FIRST_TIMER), `other`, or `unknown` when API unavailable.
+
+Per‑PR metrics (optional fields):
+
+- `review_count`, `approval_count`, `change_request_count`.
+- `time_to_first_review_seconds` (created_at → earliest review), `time_to_merge_seconds` (created_at → merged_at), when timestamps are available.
 
 ## Testing & validation
 

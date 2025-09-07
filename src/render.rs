@@ -168,10 +168,13 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     max_patch_bytes: params.max_patch_bytes,
   };
   let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
+
   for sha in shas.iter() {
     let mut c = process_commit(sha, &context)?;
+
     if let Some(dir) = &params.save_patches_dir {
       let p = Path::new(dir);
+
       if p.exists() {
         crate::commit::save_patch_to_disk(&mut c, &params.repo, p)?;
       }

@@ -165,6 +165,17 @@ pub struct GithubPullRequest {
   pub base: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub commits: Option<Vec<PullRequestCommit>>,
+  // Optional metrics (best-effort)
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub review_count: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub approval_count: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub change_request_count: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub time_to_first_review_seconds: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub time_to_merge_seconds: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

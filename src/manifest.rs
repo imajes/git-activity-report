@@ -59,7 +59,7 @@ impl OverallManifest {
     Ok(path)
   }
 
-  #[allow(dead_code)]
+  #[cfg(any(test, feature = "testutil"))]
   pub fn as_value(&self) -> &serde_json::Value {
     &self.value
   }
@@ -92,6 +92,7 @@ pub fn write_overall_manifest(
     include_patch,
     include_unmerged,
   );
+
   for e in entries {
     overall.push_simple_entry(e.label.clone(), e.start.clone(), e.end.clone(), &e.file);
   }
