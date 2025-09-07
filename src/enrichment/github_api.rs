@@ -488,115 +488,13 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     let mut reviewers_vec: Vec<GithubUser> = Vec::new();
 
     if let Some(rev_arr) = reviews.as_ref().and_then(|v| v.as_array()) {
-      review_count = Some(rev_arr.len() as i64);
-
-      let mut approvals = 0i64;
-      let mut changes = 0i64;
-      let mut first_review_ts: Option<String> = None;
-      let mut latest_approved_ts: Option<String> = None;
-      let mut latest_approved_login: Option<String> = None;
-
-      use std::collections::BTreeSet;
-      let mut seen_logins: BTreeSet<String> = BTreeSet::new();
-
-      for r in rev_arr {
-        let state_str = r.fetch("state").to_or_default::<String>();
-        let login_opt = r.fetch("user.login").to::<String>();
-        let assoc_opt = r.fetch("author_association").to::<String>();
-        let submitted_at = r.fetch("submitted_at").to::<String>();
-
-        if let Some(ts) = &submitted_at {
-          if first_review_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
-            first_review_ts = Some(ts.clone());
-          }
-        }
-
-        if state_str.eq_ignore_ascii_case("APPROVED") {
-          approvals += 1;
-          if let Some(ts) = &submitted_at {
-            if latest_approved_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
-              latest_approved_ts = Some(ts.clone());
-              latest_approved_login = login_opt.clone();
-            }
-          }
-        } else if state_str.eq_ignore_ascii_case("CHANGES_REQUESTED") {
-          changes += 1;
-        }
-
-        let Some(login) = login_opt else { continue };
-
-        if !seen_logins.insert(login.clone()) {
-          continue;
-        }
-
-        let assoc = assoc_opt.unwrap_or_default();
-        let mut user_type = classify_user(&login, Some(&assoc));
-
-        let user_json = api.get_user_json(&login);
-        let email = user_json.as_ref().and_then(|u| u.fetch("email").to::<String>());
-
-        if user_type.as_str() == "unknown" {
-          let is_bot_json = user_json
-            .as_ref()
-            .and_then(|u| u.fetch("type").to::<String>())
-            .map(|t| t.eq_ignore_ascii_case("Bot"))
-            .unwrap_or(false);
-
-          if is_bot_json || login.ends_with("[bot]") {
-            user_type = "bot".to_string();
-          }
-        }
-
-        let reviewer = GithubUser {
-          login: Some(login.clone()),
-          profile_url: Some(format!("https://github.com/{}", login)),
-          r#type: Some(user_type),
-          email,
-        };
-
-        reviewers_vec.push(reviewer);
-      }
-
-      approval_count = Some(approvals);
-      change_request_count = Some(changes);
-
-      if let (Some(first_ts), Some(created)) = (
-        first_review_ts,
-        details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()),
-      ) {
-        time_to_first_review_seconds = diff_seconds(&created, &first_ts);
-      }
-
-      if let Some(login) = latest_approved_login {
-        let approver_email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
-
-        let user_type = details
-          .as_ref()
-          .map(|_| classify_user(&login, None))
-          .unwrap_or_else(|| "unknown".into());
-
-        let approver_user = GithubUser {
-          login: Some(login.clone()),
-          profile_url: Some(format!("https://github.com/{}", login)),
-          r#type: Some(user_type),
-          email: approver_email,
-        };
-
-        approver = Some(approver_user);
-      } else if let Some(d) = &details {
-        if let Some(mby) = d.fetch("merged_by.login").to::<String>() {
-          let merged_by_email = api.get_user_json(&mby).and_then(|u| u.fetch("email").to::<String>());
-
-          let merged_by_user = GithubUser {
-            login: Some(mby.clone()),
-            profile_url: Some(format!("https://github.com/{}", mby)),
-            r#type: Some(classify_user(&mby, None)),
-            email: merged_by_email,
-          };
-
-          approver = Some(merged_by_user);
-        }
-      }
+      let (rc, ac, cc, first_ts, app_opt, reviewers) = process_reviews(api.as_ref(), rev_arr, details.as_ref());
+      review_count = Some(rc);
+      approval_count = Some(ac);
+      change_request_count = Some(cc);
+      time_to_first_review_seconds = first_ts;
+      approver = app_opt;
+      reviewers_vec = reviewers;
     }
 
     // Submitter
@@ -661,17 +559,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     let closed_at_primary = pr_json.fetch("closed_at").to::<String>();
     let closed_at = closed_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("closed_at").to::<String>()));
 
-    let diff_url = if html.is_empty() {
-      None
-    } else {
-      Some(format!("{}.diff", html))
-    };
-
-    let patch_url = if html.is_empty() {
-      None
-    } else {
-      Some(format!("{}.patch", html))
-    };
+    let (diff_url, patch_url) = urls_from_html(&html);
 
     let reviewers = if reviewers_vec.is_empty() {
       None
@@ -710,6 +598,117 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
 
   // Finalize
   Ok(out)
+}
+
+fn urls_from_html(html: &str) -> (Option<String>, Option<String>) {
+  if html.is_empty() {
+    (None, None)
+  } else {
+    (Some(format!("{}.diff", html)), Some(format!("{}.patch", html)))
+  }
+}
+
+fn process_reviews(
+  api: &dyn GithubApi,
+  rev_arr: &[serde_json::Value],
+  details: Option<&serde_json::Value>,
+) -> (i64, i64, i64, Option<i64>, Option<GithubUser>, Vec<GithubUser>) {
+  let mut approvals = 0i64;
+  let mut changes = 0i64;
+  let mut first_review_ts: Option<String> = None;
+  let mut latest_approved_ts: Option<String> = None;
+  let mut latest_approved_login: Option<String> = None;
+  use std::collections::BTreeSet;
+  let mut seen_logins: BTreeSet<String> = BTreeSet::new();
+  let mut reviewers_vec: Vec<GithubUser> = Vec::new();
+
+  for r in rev_arr {
+    let state_str = r.fetch("state").to_or_default::<String>();
+    let login_opt = r.fetch("user.login").to::<String>();
+    let assoc_opt = r.fetch("author_association").to::<String>();
+    let submitted_at = r.fetch("submitted_at").to::<String>();
+
+    if let Some(ts) = &submitted_at {
+      if first_review_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
+        first_review_ts = Some(ts.clone());
+      }
+    }
+
+    if state_str.eq_ignore_ascii_case("APPROVED") {
+      approvals += 1;
+      if let Some(ts) = &submitted_at {
+        if latest_approved_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
+          latest_approved_ts = Some(ts.clone());
+          latest_approved_login = login_opt.clone();
+        }
+      }
+    } else if state_str.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+      changes += 1;
+    }
+
+    let Some(login) = login_opt else { continue };
+
+    if !seen_logins.insert(login.clone()) {
+      continue;
+    }
+
+    let assoc = assoc_opt.unwrap_or_default();
+    let mut user_type = classify_user(&login, Some(&assoc));
+    let user_json = api.get_user_json(&login);
+    let email = user_json.as_ref().and_then(|u| u.fetch("email").to::<String>());
+    if user_type.as_str() == "unknown" {
+      let is_bot_json = user_json
+        .as_ref()
+        .and_then(|u| u.fetch("type").to::<String>())
+        .map(|t| t.eq_ignore_ascii_case("Bot"))
+        .unwrap_or(false);
+      if is_bot_json || login.ends_with("[bot]") {
+        user_type = "bot".to_string();
+      }
+    }
+    let reviewer = GithubUser {
+      login: Some(login.clone()),
+      profile_url: Some(format!("https://github.com/{}", login)),
+      r#type: Some(user_type),
+      email,
+    };
+    reviewers_vec.push(reviewer);
+  }
+
+  let mut approver: Option<GithubUser> = None;
+  if let Some(login) = latest_approved_login {
+    let approver_email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
+    let user_type = details
+      .map(|_| classify_user(&login, None))
+      .unwrap_or_else(|| "unknown".into());
+    approver = Some(GithubUser {
+      login: Some(login.clone()),
+      profile_url: Some(format!("https://github.com/{}", login)),
+      r#type: Some(user_type),
+      email: approver_email,
+    });
+  } else if let Some(d) = details {
+    if let Some(mby) = d.fetch("merged_by.login").to::<String>() {
+      let merged_by_email = api.get_user_json(&mby).and_then(|u| u.fetch("email").to::<String>());
+      approver = Some(GithubUser {
+        login: Some(mby.clone()),
+        profile_url: Some(format!("https://github.com/{}", mby)),
+        r#type: Some(classify_user(&mby, None)),
+        email: merged_by_email,
+      });
+    }
+  }
+
+  let time_to_first = if let (Some(first_ts), Some(created)) = (
+    first_review_ts,
+    details.and_then(|d| d.fetch("created_at").to::<String>()),
+  ) {
+    diff_seconds(&created, &first_ts)
+  } else {
+    None
+  };
+
+  (rev_arr.len() as i64, approvals, changes, time_to_first, approver, reviewers_vec)
 }
 
 fn classify_user(login: &str, assoc_opt: Option<&str>) -> String {
