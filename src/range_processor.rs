@@ -18,7 +18,7 @@ use anyhow::Result;
 
 use crate::cli;
 use crate::manifest::{RangeEntry, write_overall_manifest};
-use crate::params::build_report_params;
+use crate::render::build_report_params;
 use crate::range_windows::LabeledRange;
 use crate::render::run_report;
 use crate::util;

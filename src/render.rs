@@ -46,6 +46,35 @@ pub struct ReportParams {
   pub now_local: Option<DateTime<Local>>,
 }
 
+/// Build `ReportParams` from an `EffectiveConfig` and an explicit `[since, until]` window.
+pub fn build_report_params(
+  cfg: &crate::cli::EffectiveConfig,
+  since: String,
+  until: String,
+) -> ReportParams {
+  let label = match &cfg.window {
+    crate::range_windows::WindowSpec::Month { ym } => Some(ym.clone()),
+    _ => Some("window".into()),
+  };
+
+  ReportParams {
+    repo: cfg.repo.clone(),
+    label,
+    since,
+    until,
+    include_merges: cfg.include_merges,
+    include_patch: cfg.include_patch,
+    max_patch_bytes: cfg.max_patch_bytes,
+    tz: cfg.tz.clone(),
+    split_apart: cfg.split_apart,
+    split_out: if cfg.out != "-" { Some(cfg.out.clone()) } else { None },
+    include_unmerged: cfg.include_unmerged,
+    save_patches_dir: cfg.save_patches.clone(),
+    github_prs: cfg.github_prs,
+    now_local: None,
+  }
+}
+
 // --- Internal Context for Processing moved to crate::commit ---
 
 // --- Reusable Helper Functions ---

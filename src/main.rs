@@ -24,7 +24,6 @@ mod ext;
 mod gitio;
 mod manifest;
 mod model;
-mod params;
 mod range_processor;
 mod range_windows;
 mod render;
