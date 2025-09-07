@@ -21,7 +21,8 @@ use chrono::{DateTime, Local};
 
 use crate::gitio;
 use crate::model::{
-  BranchItems, ChangeSet, Commit, ManifestItem, RangeInfo, ReportOptions, ReportSummary, SimpleReport, UnmergedActivity, Person,
+  BranchItems, ChangeSet, Commit, ManifestItem, Person, RangeInfo, ReportOptions, ReportSummary, SimpleReport,
+  UnmergedActivity,
 };
 use crate::util::format_shard_name;
 
@@ -64,11 +65,7 @@ fn write_commit_shard(subdir: &Path, commit: &Commit, tz: &str) -> anyhow::Resul
   Ok(fname)
 }
 
-fn accumulate_summary_and_files(
-  commit: &Commit,
-  summary: &mut ChangeSet,
-  files_touched: &mut HashSet<String>,
-) {
+fn accumulate_summary_and_files(commit: &Commit, summary: &mut ChangeSet, files_touched: &mut HashSet<String>) {
   let (add, del) = crate::commit::sum_additions_deletions(&commit.files);
   summary.additions += add;
   summary.deletions += del;
