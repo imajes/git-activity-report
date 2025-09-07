@@ -23,6 +23,20 @@ use crate::render::build_report_params;
 use crate::render::run_report;
 use crate::util;
 
+fn commit_count(report: &serde_json::Value) -> u64 {
+  report
+    .get("summary")
+    .and_then(|s| s.get("count"))
+    .and_then(|v| v.as_u64())
+    .unwrap_or(0)
+}
+
+fn write_pretty_json<P: AsRef<std::path::Path>>(path: P, v: &serde_json::Value) -> anyhow::Result<()> {
+  std::fs::write(path.as_ref(), serde_json::to_vec_pretty(v)?)?;
+
+  Ok(())
+}
+
 pub fn generate_range_report(
   cfg: &cli::EffectiveConfig,
   range: &LabeledRange,
@@ -63,7 +77,7 @@ pub fn save_range_report(
   if !cfg.split_apart {
     if let Some(base_dir) = base_dir_opt {
       let file_path = std::path::Path::new(base_dir).join(file_rel.as_ref().expect("file name for multi"));
-      std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
+      write_pretty_json(&file_path, &report)?;
     } else if cfg.out != "-" {
       let out_path = std::path::Path::new(&cfg.out);
       let is_dir_like = cfg.out.ends_with('/') || out_path.is_dir();
@@ -73,31 +87,23 @@ pub fn save_range_report(
         std::fs::create_dir_all(out_path)?;
         let file_path = out_path.join(format!("report-{}.json", label));
         // If count==0, do not write a file; print JSON instead
-        let count = report
-          .get("summary")
-          .and_then(|s| s.get("count"))
-          .and_then(|v| v.as_u64())
-          .unwrap_or(0);
+        let count = commit_count(&report);
 
         if count == 0 {
           print_json = Some(report);
         } else {
-          std::fs::write(&file_path, serde_json::to_vec_pretty(&report)?)?;
+          write_pretty_json(&file_path, &report)?;
         }
       } else {
         if let Some(parent) = out_path.parent() {
           std::fs::create_dir_all(parent)?;
         }
-        let count = report
-          .get("summary")
-          .and_then(|s| s.get("count"))
-          .and_then(|v| v.as_u64())
-          .unwrap_or(0);
+        let count = commit_count(&report);
 
         if count == 0 {
           print_json = Some(report);
         } else {
-          std::fs::write(out_path, serde_json::to_vec_pretty(&report)?)?;
+          write_pretty_json(out_path, &report)?;
         }
       }
     } else {
