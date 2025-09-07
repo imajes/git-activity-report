@@ -45,7 +45,7 @@ doctor:
 # -------------------------------------------------------------------
 
 build:
-  cargo build
+  cargo build --verbose
 
 test:
   cargo llvm-cov nextest
