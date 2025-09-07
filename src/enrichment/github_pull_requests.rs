@@ -52,6 +52,17 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
     None => return,
   };
 
+  // Compute GitHub commit/patch/diff URLs from origin + sha.
+  let base = format!("https://github.com/{}/{}/commit/{}", owner, name, commit.sha);
+  let gh_urls = PatchReferencesGithub {
+    commit_url: Some(base.clone()),
+    diff_url: Some(format!("{}.diff", base)),
+    patch_url: Some(format!("{}.patch", base)),
+  };
+
+  // Attach URLs to commit.
+  commit.patch_references.github = Some(gh_urls);
+
   // Phase 2: fetch JSON array via api; early guard on missing/shape
   let parsed = match api.list_pulls_for_commit_json(&owner, &name, &commit.sha) {
     Some(v) => v,

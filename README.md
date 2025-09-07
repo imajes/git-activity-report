@@ -26,7 +26,7 @@ Export Git activity into structured JSON â€” either a single report or a splitâ€
 - Local run (from this repo):
 
   ```bash
-  python3 ./prototype/git-activity-report.py --help
+  python ./prototype/git-activity-report.py --help
   ```
 
 - Optional install (to invoke as `git activity-report ...`): place the script on your PATH as `git-activity-report` and make it executable.
