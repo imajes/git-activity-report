@@ -386,6 +386,7 @@ pub fn collect_pull_requests_for_commits_with_api(
 mod tests {
   use super::*;
   use serial_test::serial;
+  use serde_json::json;
 
   fn minimal_commit_with_pr(num: i64) -> Commit {
     let mut c = Commit {
@@ -654,5 +655,71 @@ mod tests {
     );
 
     std::env::remove_var("GAR_TEST_PR_JSON");
+  }
+
+  #[test]
+  fn unit_compute_review_metrics_orders_and_counts() {
+    let arr = json!([
+      {"state": "APPROVED", "user": {"login": "alice"}, "submitted_at": "2024-02-01T02:00:00Z"},
+      {"state": "COMMENTED", "user": {"login": "c"}, "submitted_at": "2024-02-01T01:30:00Z"},
+      {"state": "CHANGES_REQUESTED", "user": {"login": "d"}, "submitted_at": "2024-02-01T01:45:00Z"},
+      {"state": "APPROVED", "user": {"login": "bob"}, "submitted_at": "2024-02-01T03:00:00Z"}
+    ]);
+    let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr.as_array().unwrap());
+    assert_eq!(approvals, 2);
+    assert_eq!(changes, 1);
+    assert_eq!(first_ts.as_deref(), Some("2024-02-01T01:30:00Z"));
+    assert_eq!(latest_login.as_deref(), Some("bob"));
+  }
+
+  #[test]
+  fn unit_compute_review_metrics_no_approvals() {
+    let arr = json!([
+      {"state": "COMMENTED", "user": {"login": "x"}, "submitted_at": "2024-02-01T01:00:00Z"},
+      {"state": "CHANGES_REQUESTED", "user": {"login": "y"}, "submitted_at": "2024-02-01T02:00:00Z"}
+    ]);
+    let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr.as_array().unwrap());
+    assert_eq!(approvals, 0);
+    assert_eq!(changes, 1);
+    assert_eq!(first_ts.as_deref(), Some("2024-02-01T01:00:00Z"));
+    assert!(latest_login.is_none());
+  }
+
+  struct DummyApi;
+  #[cfg(any(test, feature = "testutil"))]
+  impl ghapi::GithubApi for DummyApi {
+    fn list_pulls_for_commit_json(&self, _o: &str, _n: &str, _s: &str) -> Option<serde_json::Value> { None }
+    fn get_pull_details_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
+    fn list_commits_in_pull(&self, _o: &str, _n: &str, _num: i64) -> Vec<crate::model::PullRequestCommit> { Vec::new() }
+    fn list_reviews_for_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
+    fn list_commits_in_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
+    fn get_user_json(&self, login: &str) -> Option<serde_json::Value> {
+      match login {
+        "alice" => Some(json!({"email": "alice@example.com", "type": "User"})),
+        "renovate[bot]" => Some(json!({"type": "Bot"})),
+        _ => None,
+      }
+    }
+  }
+
+  #[test]
+  fn unit_build_github_user_member_and_bot() {
+    let api = DummyApi;
+    let u = build_github_user(&api, "alice", Some("MEMBER"));
+    assert_eq!(u.login.as_deref(), Some("alice"));
+    assert_eq!(u.r#type.as_deref(), Some("member"));
+    assert_eq!(u.email.as_deref(), Some("alice@example.com"));
+
+    let b = build_github_user(&api, "renovate[bot]", None);
+    assert_eq!(b.r#type.as_deref(), Some("bot"));
+    assert!(b.email.is_none());
+  }
+
+  #[test]
+  fn unit_urls_from_html_variants() {
+    let (d, p) = urls_from_html("");
+    assert!(d.is_none() && p.is_none());
+    let (d2, p2) = urls_from_html("https://github.com/openai/example/pull/1");
+    assert!(d2.unwrap().ends_with(".diff") && p2.unwrap().ends_with(".patch"));
   }
 }
