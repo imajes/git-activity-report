@@ -18,23 +18,50 @@ use crate::model::{GithubPullRequest, GithubUser, PullRequestCommit};
 use crate::util::diff_seconds;
 use crate::util::run_git;
 use once_cell::sync::Lazy;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 /// Parse `remote.origin.url` to extract (owner, repo) when hosted on GitHub.
+type OriginCache = Mutex<std::collections::HashMap<String, Option<(String, String)>>>;
+
 pub fn parse_origin_github(repo: &str) -> Option<(String, String)> {
   static RE_ORIGIN: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").unwrap());
+  static CACHE: Lazy<OriginCache> = Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
 
-  if let Ok(url) = run_git(repo, &["config".into(), "--get".into(), "remote.origin.url".into()]) {
-    let u = url.trim();
-    let re1 = &*RE_ORIGIN;
-
-    if let Some(c) = re1.captures(u) {
-      let owner = c.get(1)?.as_str().to_string();
-      let repo_name = c.get(2)?.as_str().to_string();
-      return Some((owner, repo_name));
-    }
+  if let Some(cached) = CACHE.lock().ok().and_then(|m| m.get(repo).cloned()) {
+    return cached;
   }
-  None
+
+  let out = run_git(repo, &["config".into(), "--get".into(), "remote.origin.url".into()]);
+
+  let res = match out {
+    Ok(url) => {
+      let u = url.trim();
+      let re1 = &*RE_ORIGIN;
+
+      if let Some(c) = re1.captures(u) {
+        let owner = c.get(1).map(|m| m.as_str().to_string());
+        let repo_name = c.get(2).map(|m| m.as_str().to_string());
+
+        if let (Some(o), Some(r)) = (owner, repo_name) {
+          Some((o, r))
+        } else {
+          None
+        }
+      } else {
+        None
+      }
+    }
+    Err(_) => None,
+  };
+
+  if let Ok(mut map) = CACHE.lock() {
+    map.insert(repo.to_string(), res.clone());
+  }
+
+  res
 }
 
 /// Discover a GitHub token: env var first, then `gh auth token` if available.
@@ -87,6 +114,121 @@ pub trait GithubApi {
   fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
   fn list_commits_in_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
   fn get_user_json(&self, login: &str) -> Option<serde_json::Value>;
+}
+
+// --- Lightweight in-memory caching wrapper ---
+// Caches remote API responses per run to avoid duplicate HTTP calls.
+struct GithubCachedApi {
+  inner: Box<dyn GithubApi>,
+  pulls_for_commit_json: RefCell<HashMap<String, Option<serde_json::Value>>>,
+  pull_details_json: RefCell<HashMap<String, Option<serde_json::Value>>>,
+  pull_reviews_json: RefCell<HashMap<String, Option<serde_json::Value>>>,
+  pull_commits_json: RefCell<HashMap<String, Option<serde_json::Value>>>,
+  pull_commits_typed: RefCell<HashMap<String, Vec<PullRequestCommit>>>,
+  user_json: RefCell<HashMap<String, Option<serde_json::Value>>>,
+}
+
+impl GithubCachedApi {
+  fn new(inner: Box<dyn GithubApi>) -> Self {
+    Self {
+      inner,
+      pulls_for_commit_json: RefCell::new(HashMap::new()),
+      pull_details_json: RefCell::new(HashMap::new()),
+      pull_reviews_json: RefCell::new(HashMap::new()),
+      pull_commits_json: RefCell::new(HashMap::new()),
+      pull_commits_typed: RefCell::new(HashMap::new()),
+      user_json: RefCell::new(HashMap::new()),
+    }
+  }
+
+  #[inline]
+  fn key3(a: &str, b: &str, c: &str) -> String {
+    let mut s = String::with_capacity(a.len() + b.len() + c.len() + 2);
+    s.push_str(a);
+    s.push(':');
+    s.push_str(b);
+    s.push(':');
+    s.push_str(c);
+
+    s
+  }
+
+  #[inline]
+  fn key_num(a: &str, b: &str, n: i64) -> String {
+    format!("{}:{}:{}", a, b, n)
+  }
+}
+
+impl GithubApi for GithubCachedApi {
+  fn list_pulls_for_commit_json(&self, owner: &str, name: &str, sha: &str) -> Option<serde_json::Value> {
+    let key = Self::key3(owner, name, sha);
+
+    if let Some(v) = self.pulls_for_commit_json.borrow().get(&key).cloned() {
+      return v;
+    }
+    let v = self.inner.list_pulls_for_commit_json(owner, name, sha);
+    self.pulls_for_commit_json.borrow_mut().insert(key, v.clone());
+
+    v
+  }
+
+  fn get_pull_details_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
+    let key = Self::key_num(owner, name, number);
+
+    if let Some(v) = self.pull_details_json.borrow().get(&key).cloned() {
+      return v;
+    }
+    let v = self.inner.get_pull_details_json(owner, name, number);
+    self.pull_details_json.borrow_mut().insert(key, v.clone());
+
+    v
+  }
+
+  fn list_commits_in_pull(&self, owner: &str, name: &str, number: i64) -> Vec<PullRequestCommit> {
+    let key = Self::key_num(owner, name, number);
+
+    if let Some(v) = self.pull_commits_typed.borrow().get(&key).cloned() {
+      return v;
+    }
+    let v = self.inner.list_commits_in_pull(owner, name, number);
+    self.pull_commits_typed.borrow_mut().insert(key, v.clone());
+
+    v
+  }
+
+  fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
+    let key = Self::key_num(owner, name, number);
+
+    if let Some(v) = self.pull_reviews_json.borrow().get(&key).cloned() {
+      return v;
+    }
+    let v = self.inner.list_reviews_for_pull_json(owner, name, number);
+    self.pull_reviews_json.borrow_mut().insert(key, v.clone());
+
+    v
+  }
+
+  fn list_commits_in_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
+    let key = Self::key_num(owner, name, number);
+
+    if let Some(v) = self.pull_commits_json.borrow().get(&key).cloned() {
+      return v;
+    }
+    let v = self.inner.list_commits_in_pull_json(owner, name, number);
+    self.pull_commits_json.borrow_mut().insert(key, v.clone());
+
+    v
+  }
+
+  fn get_user_json(&self, login: &str) -> Option<serde_json::Value> {
+    if let Some(v) = self.user_json.borrow().get(login).cloned() {
+      return v;
+    }
+    let v = self.inner.get_user_json(login);
+    self.user_json.borrow_mut().insert(login.to_string(), v.clone());
+
+    v
+  }
 }
 
 struct GithubHttpApi {
@@ -263,23 +405,27 @@ fn env_wants_mock() -> bool {
 }
 
 fn build_api(token: Option<String>) -> Box<dyn GithubApi> {
-  if env_wants_mock() {
+  let inner: Box<dyn GithubApi> = if env_wants_mock() {
     Box::new(GithubEnvApi)
   } else if let Some(t) = token {
     Box::new(GithubHttpApi::new(t))
   } else {
     Box::new(GithubEnvApi)
-  }
+  };
+
+  Box::new(GithubCachedApi::new(inner))
 }
 
 // Public constructors for dependency injection in higher layers/tests.
 #[cfg(any(test, feature = "testutil"))]
 pub fn make_http_api(token: String) -> Box<dyn GithubApi> {
-  Box::new(GithubHttpApi::new(token))
+  let inner: Box<dyn GithubApi> = Box::new(GithubHttpApi::new(token));
+  Box::new(GithubCachedApi::new(inner))
 }
 #[cfg(any(test, feature = "testutil"))]
 pub fn make_env_api() -> Box<dyn GithubApi> {
-  Box::new(GithubEnvApi)
+  let inner: Box<dyn GithubApi> = Box::new(GithubEnvApi);
+  Box::new(GithubCachedApi::new(inner))
 }
 #[cfg(any(test, feature = "testutil"))]
 pub fn make_default_api(token: Option<String>) -> Box<dyn GithubApi> {

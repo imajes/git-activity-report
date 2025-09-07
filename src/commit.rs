@@ -75,7 +75,31 @@ pub fn build_file_entries_from(
 pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit> {
   let meta = gitio::commit_meta(context.repo, sha)?;
   let files = build_file_entries(context.repo, sha)?;
-  let diffstat_text = gitio::commit_shortstat(context.repo, sha)?;
+
+  // Synthesize a shortstat-like summary from numstat-derived entries to avoid an extra git call.
+  let files_changed = files.len();
+  let additions: i64 = files.iter().map(|f| f.additions.unwrap_or(0)).sum();
+  let deletions: i64 = files.iter().map(|f| f.deletions.unwrap_or(0)).sum();
+  let file_word = if files_changed == 1 { "file" } else { "files" };
+  let ins_word = if additions == 1 { "insertion" } else { "insertions" };
+  let del_word = if deletions == 1 { "deletion" } else { "deletions" };
+
+  let mut parts: Vec<String> = Vec::new();
+
+  if additions > 0 {
+    parts.push(format!("{} {}(+)", additions, ins_word));
+  }
+  if deletions > 0 {
+    parts.push(format!("{} {}(-)", deletions, del_word));
+  }
+
+  let suffix = if parts.is_empty() {
+    String::new()
+  } else {
+    format!(", {}", parts.join(", "))
+  };
+
+  let diffstat_text = format!("{} {} changed{}", files_changed, file_word, suffix);
 
   let author_local = iso_in_tz(meta.at, context.tz);
   let commit_local = iso_in_tz(meta.ct, context.tz);
@@ -156,10 +180,35 @@ pub fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
   Ok(commit)
 }
 
+/// Save the full patch to disk and update `commit.patch_references.local_patch_file`.
+///
+/// Optimization: When this run already fetched the patch and it was not clipped
+/// (i.e., `commit.patch_clipped == Some(false)`), write that in‑memory content
+/// instead of spawning another `git show`. Fallback to `git show` when the patch
+/// is clipped or not embedded.
 pub fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path) -> Result<()> {
   std::fs::create_dir_all(directory_path)?;
   let path = directory_path.join(format!("{}.patch", commit.short_sha));
-  let patch_content = gitio::commit_patch(repo, &commit.sha)?;
+
+  let content_from_memory = match (commit.patch_lines.as_ref(), commit.patch_clipped) {
+    (Some(lines), Some(false)) => {
+      let mut s = lines.join("\n");
+
+      if !s.ends_with('\n') {
+        s.push('\n');
+      }
+
+      Some(s)
+    }
+    _ => None,
+  };
+
+  let patch_content = if let Some(s) = content_from_memory {
+    s
+  } else {
+    gitio::commit_patch(repo, &commit.sha)?
+  };
+
   std::fs::write(&path, patch_content)?;
   commit.patch_references.local_patch_file = Some(path.to_string_lossy().to_string());
 

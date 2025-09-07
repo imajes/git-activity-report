@@ -1,6 +1,6 @@
 {
 "repo": "/Users/james/Projects/git-activity-report/gar-rs",
-"generated_at": "2025-09-07T11-52-49",
+"generated_at": "2025-09-07T11-59-19",
 "modules": [
 {
 "file": "src/commit.rs",
@@ -56,16 +56,6 @@
 "manifest contains ranges[] in chronological order of entries provided",
 "file paths in entries are relative to base_dir and point to report-<label>.json",
 "generated_at is serialized in %Y-%m-%dT%H:%M:%S (local)"
-]
-},
-{
-"file": "src/params.rs",
-"role": "parameter mapping",
-"purpose": "Translate EffectiveConfig + [since,until] into ReportParams for render",
-"outputs": "ReportParams with label, flags, out dir decisions",
-"invariants": [
-"label derives from window type (Month => ym; else \"window\") unless overridden later",
-"split_out is set when out != \"-\"; otherwise resolved by render"
 ]
 },
 {

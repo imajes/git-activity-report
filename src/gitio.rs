@@ -225,6 +225,7 @@ pub fn commit_name_status(repo: &str, sha: &str) -> Result<Vec<std::collections:
 }
 
 /// Show shortstat and return the trailing summary line.
+#[cfg(test)]
 pub fn commit_shortstat(repo: &str, sha: &str) -> Result<String> {
   let args: Vec<String> = vec![
     "show".into(),
