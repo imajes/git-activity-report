@@ -64,6 +64,20 @@ fn write_commit_shard(subdir: &Path, commit: &Commit, tz: &str) -> anyhow::Resul
   Ok(fname)
 }
 
+fn accumulate_summary_and_files(
+  commit: &Commit,
+  summary: &mut ChangeSet,
+  files_touched: &mut HashSet<String>,
+) {
+  let (add, del) = crate::commit::sum_additions_deletions(&commit.files);
+  summary.additions += add;
+  summary.deletions += del;
+
+  for f in &commit.files {
+    files_touched.insert(f.file.clone());
+  }
+}
+
 // --- Parameter Structs ---
 // These remain unchanged as they define the public API.
 
@@ -275,12 +289,7 @@ fn process_commit_range(params: &ReportParams, subdir: &Path, label: &str) -> Re
     });
     let author_key = author_key_for(&commit.author);
     *authors.entry(author_key).or_insert(0) += 1;
-    let (add, del) = crate::commit::sum_additions_deletions(&commit.files);
-    summary.additions += add;
-    summary.deletions += del;
-    for f in &commit.files {
-      files_touched.insert(f.file.clone());
-    }
+    accumulate_summary_and_files(&commit, &mut summary, &mut files_touched);
 
     commits.push(commit);
   }
