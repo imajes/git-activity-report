@@ -20,7 +20,7 @@
 
 use camino::Utf8PathBuf;
 use once_cell::sync::Lazy;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use std::process::Command;
 use std::{
