@@ -244,6 +244,7 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
   }
 
   // Fallback: delegate to git approxidate by passing raw phrase and using "now" until
+
   Ok((input.to_string(), "now".to_string()))
 }
 
@@ -320,6 +321,7 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
       cursor_m = prev_m;
     }
     out.reverse();
+
     return Some(out);
   }
 
@@ -349,6 +351,7 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
       cursor = start;
     }
     out.reverse();
+
     return Some(out);
   }
 

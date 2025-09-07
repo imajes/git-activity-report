@@ -38,6 +38,7 @@ fn main() -> Result<()> {
   if cli.gen_man {
     let page = util::render_man_page::<Cli>()?;
     print!("{}", page);
+
     return Ok(());
   }
 

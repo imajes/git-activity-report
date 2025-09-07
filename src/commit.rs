@@ -34,6 +34,7 @@ pub struct ProcessContext<'a> {
 pub fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
   let (num_list, num_map) = gitio::commit_numstat(repo, sha)?;
   let name_status_list = gitio::commit_name_status(repo, sha)?;
+
   Ok(build_file_entries_from(num_list, num_map, name_status_list))
 }
 
@@ -161,5 +162,6 @@ pub fn save_patch_to_disk(commit: &mut Commit, repo: &str, directory_path: &Path
   let patch_content = gitio::commit_patch(repo, &commit.sha)?;
   std::fs::write(&path, patch_content)?;
   commit.patch_references.local_patch_file = Some(path.to_string_lossy().to_string());
+
   Ok(())
 }

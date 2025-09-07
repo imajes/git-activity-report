@@ -348,103 +348,114 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     let mut approver: Option<GithubUser> = None;
     let mut reviewers_vec: Vec<GithubUser> = Vec::new();
 
-    if let Some(rev_v) = &reviews {
-      if let Some(arr) = rev_v.as_array() {
-        review_count = Some(arr.len() as i64);
-        let mut approvals = 0i64;
-        let mut changes = 0i64;
-        let mut first_review_ts: Option<String> = None;
-        let mut latest_approved_ts: Option<String> = None;
-        let mut latest_approved_login: Option<String> = None;
+    if let Some(rev_arr) = reviews.as_ref().and_then(|v| v.as_array()) {
+      review_count = Some(rev_arr.len() as i64);
 
-        use std::collections::BTreeSet;
-        let mut seen_logins: BTreeSet<String> = BTreeSet::new();
+      let mut approvals = 0i64;
+      let mut changes = 0i64;
+      let mut first_review_ts: Option<String> = None;
+      let mut latest_approved_ts: Option<String> = None;
+      let mut latest_approved_login: Option<String> = None;
 
-        for r in arr {
-          let state_str = r.fetch("state").to_or_default::<String>();
-          let login_opt = r.fetch("user.login").to::<String>();
-          let assoc_opt = r.fetch("author_association").to::<String>();
-          let submitted_at = r.fetch("submitted_at").to::<String>();
+      use std::collections::BTreeSet;
+      let mut seen_logins: BTreeSet<String> = BTreeSet::new();
 
+      for r in rev_arr {
+        let state_str = r.fetch("state").to_or_default::<String>();
+        let login_opt = r.fetch("user.login").to::<String>();
+        let assoc_opt = r.fetch("author_association").to::<String>();
+        let submitted_at = r.fetch("submitted_at").to::<String>();
+
+        if let Some(ts) = &submitted_at {
+          if first_review_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
+            first_review_ts = Some(ts.clone());
+          }
+        }
+
+        if state_str.eq_ignore_ascii_case("APPROVED") {
+          approvals += 1;
           if let Some(ts) = &submitted_at {
-            if first_review_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
-              first_review_ts = Some(ts.clone());
+            if latest_approved_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
+              latest_approved_ts = Some(ts.clone());
+              latest_approved_login = login_opt.clone();
             }
           }
+        } else if state_str.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+          changes += 1;
+        }
 
-          if state_str.eq_ignore_ascii_case("APPROVED") {
-            approvals += 1;
-            if let Some(ts) = &submitted_at {
-              if latest_approved_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
-                latest_approved_ts = Some(ts.clone());
-                latest_approved_login = login_opt.clone();
-              }
-            }
-          } else if state_str.eq_ignore_ascii_case("CHANGES_REQUESTED") {
-            changes += 1;
-          }
+        let Some(login) = login_opt else { continue };
 
-          if let Some(l) = login_opt {
-            if !seen_logins.contains(&l) {
-              seen_logins.insert(l.clone());
-              let mut user = GithubUser {
-                login: Some(l.clone()),
-                profile_url: Some(format!("https://github.com/{}", l)),
-                r#type: None,
-                email: None,
-              };
-              // Classification from association or by login suffix; email via user profile (best‑effort)
-              let assoc = assoc_opt.clone().unwrap_or_default();
-              user.r#type = Some(classify_user(&l, Some(&assoc)));
-              if let Some(ujson) = api.get_user_json(&l) {
-                let email = ujson.fetch("email").to::<String>();
-                user.email = email;
-                if user.r#type.as_deref() == Some("unknown") {
-                  let t = ujson.fetch("type").to::<String>();
+        if !seen_logins.insert(login.clone()) {
+          continue;
+        }
 
-                  if let Some(tt) = t {
-                    if tt.eq_ignore_ascii_case("Bot") || l.ends_with("[bot]") {
-                      user.r#type = Some("bot".to_string());
-                    }
-                  }
-                }
-              }
-              reviewers_vec.push(user);
-            }
+        let assoc = assoc_opt.unwrap_or_default();
+        let mut user_type = classify_user(&login, Some(&assoc));
+
+        let user_json = api.get_user_json(&login);
+        let email = user_json.as_ref().and_then(|u| u.fetch("email").to::<String>());
+
+        if user_type.as_str() == "unknown" {
+          let is_bot_json = user_json
+            .as_ref()
+            .and_then(|u| u.fetch("type").to::<String>())
+            .map(|t| t.eq_ignore_ascii_case("Bot"))
+            .unwrap_or(false);
+
+          if is_bot_json || login.ends_with("[bot]") {
+            user_type = "bot".to_string();
           }
         }
 
-        approval_count = Some(approvals);
-        change_request_count = Some(changes);
+        let reviewer = GithubUser {
+          login: Some(login.clone()),
+          profile_url: Some(format!("https://github.com/{}", login)),
+          r#type: Some(user_type),
+          email,
+        };
 
-        if let (Some(first_ts), Some(created)) = (
-          first_review_ts,
-          details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()),
-        ) {
-          time_to_first_review_seconds = diff_seconds(&created, &first_ts);
-        }
+        reviewers_vec.push(reviewer);
+      }
 
-        if let Some(login) = latest_approved_login {
-          approver = Some(GithubUser {
-            login: Some(login.clone()),
-            profile_url: Some(format!("https://github.com/{}", login)),
-            r#type: Some(
-              details
-                .as_ref()
-                .map(|_| classify_user(&login, None))
-                .unwrap_or_else(|| "unknown".into()),
-            ),
-            email: api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>()),
-          });
-        } else if let Some(d) = &details {
-          if let Some(mby) = d.fetch("merged_by.login").to::<String>() {
-            approver = Some(GithubUser {
-              login: Some(mby.clone()),
-              profile_url: Some(format!("https://github.com/{}", mby)),
-              r#type: Some(classify_user(&mby, None)),
-              email: api.get_user_json(&mby).and_then(|u| u.fetch("email").to::<String>()),
-            });
-          }
+      approval_count = Some(approvals);
+      change_request_count = Some(changes);
+
+      if let (Some(first_ts), Some(created)) = (
+        first_review_ts,
+        details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()),
+      ) {
+        time_to_first_review_seconds = diff_seconds(&created, &first_ts);
+      }
+
+      if let Some(login) = latest_approved_login {
+        let approver_email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
+
+        let user_type = details
+          .as_ref()
+          .map(|_| classify_user(&login, None))
+          .unwrap_or_else(|| "unknown".into());
+
+        let approver_user = GithubUser {
+          login: Some(login.clone()),
+          profile_url: Some(format!("https://github.com/{}", login)),
+          r#type: Some(user_type),
+          email: approver_email,
+        };
+
+        approver = Some(approver_user);
+      } else if let Some(d) = &details {
+        if let Some(mby) = d.fetch("merged_by.login").to::<String>() {
+          let merged_by_email = api.get_user_json(&mby).and_then(|u| u.fetch("email").to::<String>());
+
+          let merged_by_user = GithubUser {
+            login: Some(mby.clone()),
+            profile_url: Some(format!("https://github.com/{}", mby)),
+            r#type: Some(classify_user(&mby, None)),
+            email: merged_by_email,
+          };
+
+          approver = Some(merged_by_user);
         }
       }
     }
@@ -464,23 +475,25 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
         ),
         email: None,
       };
-      user.email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
-      if user.email.is_none() {
-        if let Some(cjson) = &commits_json {
-          if let Some(arr) = cjson.as_array() {
-            for item in arr {
-              let author_login = item.fetch("author.login").to::<String>();
+      let email_from_user = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
 
-              if author_login.as_deref() == Some(&login) {
-                if let Some(e) = item.fetch("commit.author.email").to::<String>() {
-                  user.email = Some(e);
-                  break;
-                }
-              }
-            }
+      let commit_items_opt = commits_json.as_ref().and_then(|c| c.as_array());
+
+      let email_from_commits = commit_items_opt.and_then(|commit_items| {
+        commit_items.iter().find_map(|commit_item| {
+          let author_login = commit_item.fetch("author.login").to::<String>();
+
+          if author_login.as_deref() == Some(login.as_str()) {
+            return commit_item.fetch("commit.author.email").to::<String>();
           }
-        }
-      }
+
+          None
+        })
+      });
+
+      let resolved_email = email_from_user.or(email_from_commits);
+
+      user.email = resolved_email;
       user
     });
 
@@ -500,20 +513,14 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       .to::<String>()
       .map(|b| b.lines().map(|s| s.to_string()).collect());
 
-    let created_at = pr_json
-      .fetch("created_at")
-      .to::<String>()
-      .or_else(|| details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()));
+    let created_at_primary = pr_json.fetch("created_at").to::<String>();
+    let created_at = created_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()));
 
-    let merged_at = pr_json
-      .fetch("merged_at")
-      .to::<String>()
-      .or_else(|| details.as_ref().and_then(|d| d.fetch("merged_at").to::<String>()));
+    let merged_at_primary = pr_json.fetch("merged_at").to::<String>();
+    let merged_at = merged_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("merged_at").to::<String>()));
 
-    let closed_at = pr_json
-      .fetch("closed_at")
-      .to::<String>()
-      .or_else(|| details.as_ref().and_then(|d| d.fetch("closed_at").to::<String>()));
+    let closed_at_primary = pr_json.fetch("closed_at").to::<String>();
+    let closed_at = closed_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("closed_at").to::<String>()));
 
     let diff_url = if html.is_empty() {
       None
@@ -871,6 +878,155 @@ mod tests {
     std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
     assert!(get_pull_details("o", "r", 1, "t").is_none());
     assert!(list_commits_in_pull("o", "r", 1, "t").is_empty());
+  }
+
+  #[test]
+  #[serial]
+  fn token_gh_command_success_returns_token() {
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GH_TOKEN");
+
+    let td = tempfile::TempDir::new().unwrap();
+    let bin_dir = td.path();
+    let gh_path = bin_dir.join("gh");
+
+    #[cfg(target_os = "windows")]
+    let script = "@echo off\necho my-gh-token\nexit /b 0\n";
+    #[cfg(not(target_os = "windows"))]
+    let script = "#!/bin/sh\necho my-gh-token\nexit 0\n";
+    std::fs::write(&gh_path, script).unwrap();
+    #[cfg(not(target_os = "windows"))]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let mut perms = std::fs::metadata(&gh_path).unwrap().permissions();
+      perms.set_mode(0o755);
+      std::fs::set_permissions(&gh_path, perms).unwrap();
+    }
+
+    let old_path = std::env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    std::env::set_var("PATH", &new_path);
+
+    assert_eq!(get_github_token(), Some("my-gh-token".to_string()));
+
+    std::env::set_var("PATH", old_path);
+  }
+
+  #[test]
+  #[serial]
+  fn submitter_email_fallback_from_commits() {
+    // Repo with GitHub origin
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let _ = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
+      .current_dir(repo)
+      .status();
+
+    // No token; enable env-backed API and simulate missing email in users JSON
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GH_TOKEN");
+
+    std::env::set_var(
+      "GAR_TEST_PR_JSON",
+      serde_json::json!([{ "html_url": "https://github.com/openai/example/pull/1", "number": 1, "title": "T", "state": "open", "user": {"login": "octo"} }]).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PULL_DETAILS_JSON",
+      serde_json::json!({"created_at": "2024-01-01T00:00:00Z"}).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_COMMITS_JSON",
+      serde_json::json!([
+        { "author": {"login": "octo"}, "commit": {"author": {"email": "octo@example.com"}, "message": "Subj\nBody"}, "sha": "abc1234" }
+      ]).to_string(),
+    );
+    // Users JSON with no email for octo → forces fallback from commits JSON
+    std::env::set_var(
+      "GAR_TEST_USERS_JSON",
+      serde_json::json!({ "octo": {"type": "User"} }).to_string(),
+    );
+
+    let out = try_fetch_prs_for_commit(repo.to_str().unwrap(), "deadbeef").unwrap();
+    assert_eq!(out.len(), 1);
+    let pr = &out[0];
+    let submitter_email = pr.submitter.as_ref().and_then(|u| u.email.clone());
+    assert_eq!(submitter_email.as_deref(), Some("octo@example.com"));
+
+    std::env::remove_var("GAR_TEST_PR_JSON");
+    std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
+    std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
+    std::env::remove_var("GAR_TEST_USERS_JSON");
+  }
+
+  #[test]
+  #[serial]
+  fn reviews_dedup_bot_and_first_review_time() {
+    let td = tempfile::TempDir::new().unwrap();
+    let repo = td.path();
+    let _ = std::process::Command::new("git")
+      .args(["init", "-q"])
+      .current_dir(repo)
+      .status()
+      .unwrap();
+    let _ = std::process::Command::new("git")
+      .args(["remote", "add", "origin", "https://github.com/openai/example.git"])
+      .current_dir(repo)
+      .status();
+
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GH_TOKEN");
+
+    std::env::set_var(
+      "GAR_TEST_PR_JSON",
+      serde_json::json!([{ "html_url": "https://github.com/openai/example/pull/3", "number": 3, "title": "T", "state": "open" }]).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PULL_DETAILS_JSON",
+      serde_json::json!({"created_at": "2024-02-01T00:00:00Z"}).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_REVIEWS_JSON",
+      serde_json::json!([
+        {"state": "APPROVED", "user": {"login": "ci-bot[bot]"}, "submitted_at": "2024-02-01T01:00:00Z"},
+        {"state": "APPROVED", "user": {"login": "ci-bot[bot]"}, "submitted_at": "2024-02-01T02:00:00Z"},
+        {"state": "COMMENTED", "user": {"login": "alice"}, "author_association": "CONTRIBUTOR", "submitted_at": "2024-02-01T03:00:00Z"}
+      ]).to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_USERS_JSON",
+      serde_json::json!({
+        "ci-bot[bot]": {"type": "Bot"},
+        "alice": {"email": "alice@example.com", "type": "User"}
+      })
+      .to_string(),
+    );
+
+    let out = try_fetch_prs_for_commit(repo.to_str().unwrap(), "deadbeef").unwrap();
+    assert_eq!(out.len(), 1);
+    let pr = &out[0];
+    assert_eq!(pr.review_count, Some(3));
+    assert_eq!(pr.approval_count, Some(2));
+
+    // first review 1h after created
+    assert_eq!(pr.time_to_first_review_seconds, Some(3600));
+
+    let reviewers = pr.reviewers.as_ref().unwrap();
+    assert_eq!(reviewers.len(), 2);
+    let bot = reviewers.iter().find(|u| u.login.as_deref() == Some("ci-bot[bot]"));
+    assert_eq!(bot.and_then(|u| u.r#type.clone()).as_deref(), Some("bot"));
+    let human = reviewers.iter().find(|u| u.login.as_deref() == Some("alice"));
+    assert_eq!(human.and_then(|u| u.r#type.clone()).as_deref(), Some("contributor"));
+
+    std::env::remove_var("GAR_TEST_PR_JSON");
+    std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
+    std::env::remove_var("GAR_TEST_PR_REVIEWS_JSON");
+    std::env::remove_var("GAR_TEST_USERS_JSON");
   }
 
   #[test]
