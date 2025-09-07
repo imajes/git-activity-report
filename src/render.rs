@@ -25,6 +25,9 @@ use crate::model::{
 };
 use crate::util::format_shard_name;
 
+// Clippy: factor complex tuple into a named alias for readability.
+type ProcessRangeOut = (Vec<Commit>, Vec<ManifestItem>, ChangeSet, BTreeMap<String, i64>);
+
 // --- Parameter Structs ---
 // These remain unchanged as they define the public API.
 
@@ -47,11 +50,7 @@ pub struct ReportParams {
 }
 
 /// Build `ReportParams` from an `EffectiveConfig` and an explicit `[since, until]` window.
-pub fn build_report_params(
-  cfg: &crate::cli::EffectiveConfig,
-  since: String,
-  until: String,
-) -> ReportParams {
+pub fn build_report_params(cfg: &crate::cli::EffectiveConfig, since: String, until: String) -> ReportParams {
   let label = match &cfg.window {
     crate::range_windows::WindowSpec::Month { ym } => Some(ym.clone()),
     _ => Some("window".into()),
@@ -176,8 +175,8 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
   let subdir = Path::new(&base_dir).join(&label);
   std::fs::create_dir_all(&subdir)?;
 
-  // Process the primary commit range: write shards and collect items/summary/authors
-  let (items, summary, authors) = process_commit_range(params, &subdir, &label)?;
+  // Process the primary commit range: write shards and collect items/summary/authors/commits
+  let (commits, items, summary, authors) = process_commit_range(params, &subdir, &label)?;
 
   // Optionally process unmerged branches
   let _unmerged_activity = if params.include_unmerged {
@@ -186,30 +185,7 @@ pub fn run_report(params: &ReportParams) -> Result<serde_json::Value> {
     None
   };
 
-  // Build the unified report (simple + items)
-  // Recompute commits in-memory to embed into report
-  let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
-  let context = ProcessContext {
-    repo: &params.repo,
-    tz: &params.tz,
-    github_prs: params.github_prs,
-    include_patch: params.include_patch,
-    max_patch_bytes: params.max_patch_bytes,
-  };
-  let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
-
-  for sha in shas.iter() {
-    let mut c = process_commit(sha, &context)?;
-
-    if let Some(dir) = &params.save_patches_dir {
-      let p = Path::new(dir);
-
-      if p.exists() {
-        crate::commit::save_patch_to_disk(&mut c, &params.repo, p)?;
-      }
-    }
-    commits.push(c);
-  }
+  // Build the unified report (simple + items) using already processed commits
 
   let range = RangeInfo {
     label: label.clone(),
@@ -250,7 +226,7 @@ fn process_commit_range(
   params: &ReportParams,
   subdir: &Path,
   label: &str,
-) -> Result<(Vec<ManifestItem>, ChangeSet, BTreeMap<String, i64>)> {
+) -> Result<ProcessRangeOut> {
   let shas = gitio::rev_list(&params.repo, &params.since, &params.until, params.include_merges)?;
   let context = ProcessContext {
     repo: &params.repo,
@@ -260,6 +236,7 @@ fn process_commit_range(
     max_patch_bytes: params.max_patch_bytes,
   };
 
+  let mut commits: Vec<Commit> = Vec::with_capacity(shas.len());
   let mut items = Vec::with_capacity(shas.len());
   let mut authors: BTreeMap<String, i64> = BTreeMap::new();
   let mut summary = ChangeSet {
@@ -280,7 +257,7 @@ fn process_commit_range(
     // Write commit shard to disk
     let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, &params.tz);
     let shard_path = subdir.join(&fname);
-    std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
+    std::fs::write(&shard_path, serde_json::to_vec(&commit)?)?;
 
     // Accumulate manifest data
     items.push(ManifestItem {
@@ -295,11 +272,13 @@ fn process_commit_range(
       summary.deletions += f.deletions.unwrap_or(0);
       files_touched.insert(f.file.clone());
     }
+
+    commits.push(commit);
   }
 
   summary.files_touched = files_touched.len();
 
-  Ok((items, summary, authors))
+  Ok((commits, items, summary, authors))
 }
 
 /// Helper for `run_full` to process unmerged branches.
@@ -353,7 +332,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
       let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, &params.tz);
       let shard_path = branch_dir.join(&fname);
       std::fs::create_dir_all(shard_path.parent().unwrap())?;
-      std::fs::write(&shard_path, serde_json::to_vec_pretty(&commit)?)?;
+      std::fs::write(&shard_path, serde_json::to_vec(&commit)?)?;
 
       branch_items.push(ManifestItem {
         sha: commit.sha.clone(),
