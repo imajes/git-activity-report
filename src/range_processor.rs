@@ -59,6 +59,7 @@ pub fn save_range_report(
   };
 
   let mut print_json: Option<serde_json::Value> = None;
+
   if !cfg.split_apart {
     if let Some(base_dir) = base_dir_opt {
       let file_path = std::path::Path::new(base_dir).join(file_rel.as_ref().expect("file name for multi"));
@@ -66,6 +67,7 @@ pub fn save_range_report(
     } else if cfg.out != "-" {
       let out_path = std::path::Path::new(&cfg.out);
       let is_dir_like = cfg.out.ends_with('/') || out_path.is_dir();
+
       if is_dir_like {
         let label = &range.label;
         std::fs::create_dir_all(out_path)?;
@@ -76,6 +78,7 @@ pub fn save_range_report(
           .and_then(|s| s.get("count"))
           .and_then(|v| v.as_u64())
           .unwrap_or(0);
+
         if count == 0 {
           print_json = Some(report);
         } else {
@@ -90,6 +93,7 @@ pub fn save_range_report(
           .and_then(|s| s.get("count"))
           .and_then(|v| v.as_u64())
           .unwrap_or(0);
+
         if count == 0 {
           print_json = Some(report);
         } else {
@@ -133,9 +137,11 @@ pub fn process_ranges(
   for r in ranges.iter() {
     let out = generate_range_report(cfg, r, now_opt, base_dir_opt.as_deref())?;
     let (entry, to_print) = save_range_report(cfg, r, out, base_dir_opt.as_deref())?;
+
     if let Some(e) = entry {
       entries.push(e);
     }
+
     if let Some(v) = to_print {
       last_single_output = Some(v);
     }

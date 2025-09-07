@@ -76,6 +76,11 @@ Each agent work cycle must follow these steps:
 - Commits: Use conventional messages (e.g., `feat:`, `fix:`, `refactor:`) and mention changed flags/schemas.
 - PRs: Require description, sample commands, explicit note of schema changes.
 
+### Code Hygiene Addendum
+
+- Do not use `#[allow(dead_code)]` by default. This attribute is only permitted with explicit approval from the human collaborator and must include a brief in-line justification explaining why it is necessary and when it will be removed or cfg-gated.
+- Prefer `#[cfg(any(test, feature = "testutil"))]` for test-only seams, helpers, and constructors. Production builds should remain warning-free without suppressing lints.
+
 ## PR Checklist for Agents (Must Pass)
 - Build, test, format/lint, spacing/layout, and module headers as outlined above. CI (`just ci-check`) must pass.
 - PR description must list: summary, sample command(s), cycle file link, and note all schema changes (additive only).

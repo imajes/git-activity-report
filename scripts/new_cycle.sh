@@ -48,11 +48,11 @@ json_escape() {
 {
   echo "# Cycle $idx — $desc_input ($ts)"
   echo
-  if [[ -f "$GITROOT/docs/TASK_TEMPLATE.md" ]]; then
+  if [[ -f "$GITROOT/prompt-engineering/TASK_TEMPLATE.md" ]]; then
     # print template without the leading title line if present
-    awk 'NR==1 && /^# /{next} {print}' "$GITROOT/docs/TASK_TEMPLATE.md"
+    awk 'NR==1 && /^# /{next} {print}' "$GITROOT/prompt-engineering/TASK_TEMPLATE.md"
   else
-    echo "[missing docs/TASK_TEMPLATE.md]"
+    echo "[missing prompt-engineering/TASK_TEMPLATE.md]"
   fi
   echo
   echo "---"

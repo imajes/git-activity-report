@@ -62,7 +62,7 @@ pub fn month_bounds(year_month: &str) -> Result<(String, String)> {
 /// Compute (since, until) for a window.
 ///
 /// Supports an optional `now` override for deterministic testing.
-#[allow(dead_code)]
+#[cfg(any(test, feature = "testutil"))]
 pub fn compute_window_strings(
   window: &WindowSpec,
   now: Option<chrono::DateTime<chrono::Local>>,
@@ -114,6 +114,31 @@ fn last_month_range(now: chrono::DateTime<chrono::Local>) -> (String, String) {
 fn iso_naive(dt: chrono::DateTime<chrono::Local>) -> String {
   // Render as YYYY-MM-DDTHH:MM:SS, drop timezone for git approxidate friendliness
   dt.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string()
+}
+
+fn compute_interval_bounds(
+  now: chrono::DateTime<Local>,
+  interval: Interval,
+) -> (chrono::DateTime<Local>, chrono::DateTime<Local>) {
+  match interval {
+    Interval::Seconds(secs) => {
+      let d = chrono::Duration::seconds(secs.into());
+
+      if secs < 0 { (now + d, now) } else { (now, now + d) }
+    }
+    Interval::Days(days) => {
+      let d = chrono::Duration::days(days.into());
+
+      if days < 0 { (now + d, now) } else { (now, now + d) }
+    }
+    Interval::Months(months) => {
+      if months < 0 {
+        (subtract_months(now, months.unsigned_abs() as i32), now)
+      } else {
+        (now, subtract_months(now, -months))
+      }
+    }
+  }
 }
 
 /// Parse a `--now-override` string into a local DateTime.
@@ -188,6 +213,7 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
 
     let cur_idx = today_start.weekday().num_days_from_monday() as i64;
     let mut delta_days = cur_idx - target_idx;
+
     if delta_days <= 0 {
       delta_days += 7;
     }
@@ -202,23 +228,7 @@ fn for_phrase_bounds(input: &str, now: Option<chrono::DateTime<chrono::Local>>) 
 
   // Duration/"ago" parsing via chrono-english (handle first to avoid misclassification by natural parser)
   if let Ok(interval) = parse_duration(&phrase) {
-    let (start, end) = match interval {
-      Interval::Seconds(secs) => {
-        let d = chrono::Duration::seconds(secs.into());
-        if secs < 0 { (now + d, now) } else { (now, now + d) }
-      }
-      Interval::Days(days) => {
-        let d = chrono::Duration::days(days.into());
-        if days < 0 { (now + d, now) } else { (now, now + d) }
-      }
-      Interval::Months(months) => {
-        if months < 0 {
-          (subtract_months(now, months.unsigned_abs() as i32), now)
-        } else {
-          (now, subtract_months(now, -months))
-        }
-      }
-    };
+    let (start, end) = compute_interval_bounds(now, interval);
 
     return Ok((iso_naive(start), iso_naive(end)));
   }
@@ -244,12 +254,41 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
   let phrase = input.trim().to_lowercase();
   let now = now.unwrap_or_else(Local::now);
 
-  // every month for the last N months
-  if let Some(caps) = regex::Regex::new(r"^every\s+month\s+for\s+the\s+last\s+(\d+)\s+months?$")
+  // Helper: parse numeric or small spelled numbers (one..twelve)
+  fn parse_count(s: &str) -> Option<i32> {
+    if let Ok(n) = s.parse::<i32>() {
+      return Some(n);
+    }
+    let map = [
+      ("one", 1),
+      ("two", 2),
+      ("three", 3),
+      ("four", 4),
+      ("five", 5),
+      ("six", 6),
+      ("seven", 7),
+      ("eight", 8),
+      ("nine", 9),
+      ("ten", 10),
+      ("eleven", 11),
+      ("twelve", 12),
+    ];
+
+    for (w, n) in map {
+      if s == w {
+        return Some(n);
+      }
+    }
+    None
+  }
+
+  // (every|each) month for the last N months
+  if let Some(caps) = regex::Regex::new(r"^(?:every|each)\s+month\s+for\s+the\s+last\s+([a-z0-9\-]+)\s+months?$")
     .ok()?
     .captures(&phrase)
   {
-    let n: i32 = caps.get(1).unwrap().as_str().parse().ok()?;
+    let raw = caps.get(1).unwrap().as_str();
+    let n: i32 = parse_count(raw)?;
     let mut out: Vec<LabeledRange> = Vec::new();
     let mut cursor_y = now.year();
     let mut cursor_m = now.month() as i32;
@@ -284,14 +323,16 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
     return Some(out);
   }
 
-  // every week for the last N weeks
-  if let Some(caps) = regex::Regex::new(r"^every\s+week\s+for\s+the\s+last\s+(\d+)\s+weeks?$")
+  // (every|each) week for the last N weeks
+  if let Some(caps) = regex::Regex::new(r"^(?:every|each)\s+week\s+for\s+the\s+last\s+([a-z0-9\-]+)\s+weeks?$")
     .ok()?
     .captures(&phrase)
   {
-    let n: i32 = caps.get(1).unwrap().as_str().parse().ok()?;
+    let raw = caps.get(1).unwrap().as_str();
+    let n: i32 = parse_count(raw)?;
     let mut out: Vec<LabeledRange> = Vec::new();
     let mut cursor = start_of_week(now);
+
     for _ in 0..n {
       let start = cursor - chrono::Duration::days(7);
       let end = cursor;

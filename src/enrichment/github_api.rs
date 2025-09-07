@@ -15,13 +15,19 @@
 
 use crate::ext::serde_json::JsonFetch;
 use crate::model::{GithubPullRequest, GithubUser, PullRequestCommit};
+use crate::util::diff_seconds;
 use crate::util::run_git;
+use once_cell::sync::Lazy;
 
 /// Parse `remote.origin.url` to extract (owner, repo) when hosted on GitHub.
 pub fn parse_origin_github(repo: &str) -> Option<(String, String)> {
+  static RE_ORIGIN: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").unwrap());
+
   if let Ok(url) = run_git(repo, &["config".into(), "--get".into(), "remote.origin.url".into()]) {
     let u = url.trim();
-    let re1 = regex::Regex::new(r"^(?:git@github\.com:|https?://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$").ok()?;
+    let re1 = &*RE_ORIGIN;
+
     if let Some(c) = re1.captures(u) {
       let owner = c.get(1)?.as_str().to_string();
       let repo_name = c.get(2)?.as_str().to_string();
@@ -39,15 +45,16 @@ pub fn get_github_token() -> Option<String> {
     }
   }
 
-  if let Ok(path) = std::env::var("GH_TOKEN") {
-    if !path.trim().is_empty() {
-      return Some(path);
+  if let Ok(gh_token) = std::env::var("GH_TOKEN") {
+    if !gh_token.trim().is_empty() {
+      return Some(gh_token);
     }
   }
 
   if let Ok(output) = std::process::Command::new("gh").args(["auth", "token"]).output() {
     if output.status.success() {
       let t = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
       if !t.is_empty() {
         return Some(t);
       }
@@ -65,6 +72,7 @@ fn get_json(url: &str, token: &str) -> Option<serde_json::Value> {
     .set("User-Agent", "git-activity-report")
     .set("Authorization", &format!("Bearer {}", token))
     .call();
+
   match resp {
     Ok(r) => r.into_json().ok(),
     Err(_) => None,
@@ -72,15 +80,13 @@ fn get_json(url: &str, token: &str) -> Option<serde_json::Value> {
 }
 
 // --- Trait seam for GitHub API ---
-#[allow(dead_code)]
 pub trait GithubApi {
   fn list_pulls_for_commit_json(&self, owner: &str, name: &str, sha: &str) -> Option<serde_json::Value>;
-  #[allow(dead_code)]
   fn get_pull_details_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
-  #[allow(dead_code)]
   fn list_commits_in_pull(&self, owner: &str, name: &str, number: i64) -> Vec<PullRequestCommit>;
-  #[allow(dead_code)]
   fn list_reviews_for_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
+  fn list_commits_in_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value>;
+  fn get_user_json(&self, login: &str) -> Option<serde_json::Value>;
 }
 
 struct GithubHttpApi {
@@ -140,6 +146,19 @@ impl GithubApi for GithubHttpApi {
     );
     get_json(&url, &self.token)
   }
+
+  fn list_commits_in_pull_json(&self, owner: &str, name: &str, number: i64) -> Option<serde_json::Value> {
+    let url = format!(
+      "https://api.github.com/repos/{}/{}/pulls/{}/commits",
+      owner, name, number
+    );
+    get_json(&url, &self.token)
+  }
+
+  fn get_user_json(&self, login: &str) -> Option<serde_json::Value> {
+    let url = format!("https://api.github.com/users/{}", login);
+    get_json(&url, &self.token)
+  }
 }
 
 struct GithubEnvApi;
@@ -170,6 +189,7 @@ impl GithubApi for GithubEnvApi {
     let Some(arr) = v.as_array() else { return Vec::new() };
 
     let mut out = Vec::with_capacity(arr.len());
+
     for item in arr {
       let sha = item.fetch("sha").to_or_default::<String>();
       let msg = item.fetch("commit.message").to_or_default::<String>();
@@ -194,12 +214,52 @@ impl GithubApi for GithubEnvApi {
       None
     }
   }
+
+  fn list_commits_in_pull_json(&self, _owner: &str, _name: &str, _number: i64) -> Option<serde_json::Value> {
+    if let Ok(s) = std::env::var("GAR_TEST_PR_COMMITS_JSON") {
+      serde_json::from_str::<serde_json::Value>(&s).ok()
+    } else {
+      None
+    }
+  }
+
+  fn get_user_json(&self, login: &str) -> Option<serde_json::Value> {
+    // Prefer a consolidated map when provided
+    if let Ok(map_s) = std::env::var("GAR_TEST_USERS_JSON") {
+      if let Ok(map_v) = serde_json::from_str::<serde_json::Value>(&map_s) {
+        if let Some(obj) = map_v.as_object() {
+          if let Some(u) = obj.get(login) {
+            return Some(u.clone());
+          }
+        }
+      }
+    }
+    // Fallback to per-login var: GAR_TEST_USER_JSON_<login>
+    let key = format!("GAR_TEST_USER_JSON_{}", login);
+
+    if let Ok(s) = std::env::var(key) {
+      return serde_json::from_str::<serde_json::Value>(&s).ok();
+    }
+    None
+  }
 }
 
 fn env_wants_mock() -> bool {
-  std::env::var("GAR_TEST_PR_JSON").is_ok()
+  if std::env::var("GAR_TEST_PR_JSON").is_ok()
     || std::env::var("GAR_TEST_PULL_DETAILS_JSON").is_ok()
     || std::env::var("GAR_TEST_PR_COMMITS_JSON").is_ok()
+    || std::env::var("GAR_TEST_USERS_JSON").is_ok()
+  {
+    return true;
+  }
+
+  // Detect any per-login user fixtures
+  for (k, _) in std::env::vars() {
+    if k.starts_with("GAR_TEST_USER_JSON_") {
+      return true;
+    }
+  }
+  false
 }
 
 fn build_api(token: Option<String>) -> Box<dyn GithubApi> {
@@ -214,12 +274,10 @@ fn build_api(token: Option<String>) -> Box<dyn GithubApi> {
 
 // Public constructors for dependency injection in higher layers/tests.
 #[cfg(any(test, feature = "testutil"))]
-#[allow(dead_code)]
 pub fn make_http_api(token: String) -> Box<dyn GithubApi> {
   Box::new(GithubHttpApi::new(token))
 }
 #[cfg(any(test, feature = "testutil"))]
-#[allow(dead_code)]
 pub fn make_env_api() -> Box<dyn GithubApi> {
   Box::new(GithubEnvApi)
 }
@@ -229,7 +287,6 @@ pub fn make_default_api(token: Option<String>) -> Box<dyn GithubApi> {
 }
 
 #[cfg(any(test, feature = "testutil"))]
-#[allow(dead_code)]
 fn list_pulls_for_commit_json(owner: &str, name: &str, sha: &str, token: &str) -> Option<serde_json::Value> {
   let api = build_api(Some(token.to_string()));
   api.list_pulls_for_commit_json(owner, name, sha)
@@ -245,6 +302,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
 
   // Phase 2: select API backend; early guard when no token and no env mocks
   let token = get_github_token();
+
   if token.is_none() && !env_wants_mock() {
     return Ok(Vec::new());
   }
@@ -265,44 +323,241 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
   let mut out: Vec<GithubPullRequest> = Vec::with_capacity(arr.len());
 
   for pr_json in arr {
+    // Extract basic fields first
+    let number = pr_json.fetch("number").to::<i64>().unwrap_or(0);
+    let title = pr_json.fetch("title").to_or_default::<String>();
+    let state = pr_json.fetch("state").to_or_default::<String>();
+
     let html = pr_json.fetch("html_url").to_or_default::<String>();
-    let submitter = pr_json.fetch("user.login").to::<String>().map(|login| GithubUser {
-      login: Some(login.clone()),
-      profile_url: Some(format!("https://github.com/{}", login)),
-      r#type: None,
-      email: None,
-    });
+    let submitter_login = pr_json.fetch("user.login").to::<String>();
     let head = pr_json.fetch("head.ref").to::<String>();
     let base = pr_json.fetch("base.ref").to::<String>();
 
+    // Pull details and reviews for metrics & classification (best‑effort)
+    let details = api.get_pull_details_json(&owner, &name, number);
+    let reviews = api.list_reviews_for_pull_json(&owner, &name, number);
+    let commits_json = api.list_commits_in_pull_json(&owner, &name, number);
+
+    // Compute metrics
+    let mut review_count: Option<i64> = None;
+    let mut approval_count: Option<i64> = None;
+    let mut change_request_count: Option<i64> = None;
+    let mut time_to_first_review_seconds: Option<i64> = None;
+    let mut time_to_merge_seconds: Option<i64> = None;
+
+    let mut approver: Option<GithubUser> = None;
+    let mut reviewers_vec: Vec<GithubUser> = Vec::new();
+
+    if let Some(rev_v) = &reviews {
+      if let Some(arr) = rev_v.as_array() {
+        review_count = Some(arr.len() as i64);
+        let mut approvals = 0i64;
+        let mut changes = 0i64;
+        let mut first_review_ts: Option<String> = None;
+        let mut latest_approved_ts: Option<String> = None;
+        let mut latest_approved_login: Option<String> = None;
+
+        use std::collections::BTreeSet;
+        let mut seen_logins: BTreeSet<String> = BTreeSet::new();
+
+        for r in arr {
+          let state_str = r.fetch("state").to_or_default::<String>();
+          let login_opt = r.fetch("user.login").to::<String>();
+          let assoc_opt = r.fetch("author_association").to::<String>();
+          let submitted_at = r.fetch("submitted_at").to::<String>();
+
+          if let Some(ts) = &submitted_at {
+            if first_review_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
+              first_review_ts = Some(ts.clone());
+            }
+          }
+
+          if state_str.eq_ignore_ascii_case("APPROVED") {
+            approvals += 1;
+            if let Some(ts) = &submitted_at {
+              if latest_approved_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
+                latest_approved_ts = Some(ts.clone());
+                latest_approved_login = login_opt.clone();
+              }
+            }
+          } else if state_str.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+            changes += 1;
+          }
+
+          if let Some(l) = login_opt {
+            if !seen_logins.contains(&l) {
+              seen_logins.insert(l.clone());
+              let mut user = GithubUser {
+                login: Some(l.clone()),
+                profile_url: Some(format!("https://github.com/{}", l)),
+                r#type: None,
+                email: None,
+              };
+              // Classification from association or by login suffix; email via user profile (best‑effort)
+              let assoc = assoc_opt.clone().unwrap_or_default();
+              user.r#type = Some(classify_user(&l, Some(&assoc)));
+              if let Some(ujson) = api.get_user_json(&l) {
+                let email = ujson.fetch("email").to::<String>();
+                user.email = email;
+                if user.r#type.as_deref() == Some("unknown") {
+                  let t = ujson.fetch("type").to::<String>();
+
+                  if let Some(tt) = t {
+                    if tt.eq_ignore_ascii_case("Bot") || l.ends_with("[bot]") {
+                      user.r#type = Some("bot".to_string());
+                    }
+                  }
+                }
+              }
+              reviewers_vec.push(user);
+            }
+          }
+        }
+
+        approval_count = Some(approvals);
+        change_request_count = Some(changes);
+
+        if let (Some(first_ts), Some(created)) = (
+          first_review_ts,
+          details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()),
+        ) {
+          time_to_first_review_seconds = diff_seconds(&created, &first_ts);
+        }
+
+        if let Some(login) = latest_approved_login {
+          approver = Some(GithubUser {
+            login: Some(login.clone()),
+            profile_url: Some(format!("https://github.com/{}", login)),
+            r#type: Some(
+              details
+                .as_ref()
+                .map(|_| classify_user(&login, None))
+                .unwrap_or_else(|| "unknown".into()),
+            ),
+            email: api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>()),
+          });
+        } else if let Some(d) = &details {
+          if let Some(mby) = d.fetch("merged_by.login").to::<String>() {
+            approver = Some(GithubUser {
+              login: Some(mby.clone()),
+              profile_url: Some(format!("https://github.com/{}", mby)),
+              r#type: Some(classify_user(&mby, None)),
+              email: api.get_user_json(&mby).and_then(|u| u.fetch("email").to::<String>()),
+            });
+          }
+        }
+      }
+    }
+
+    // Submitter
+    let submitter = submitter_login.clone().map(|login| {
+      let mut user = GithubUser {
+        login: Some(login.clone()),
+        profile_url: Some(format!("https://github.com/{}", login)),
+        r#type: Some(
+          details
+            .as_ref()
+            .and_then(|d| d.fetch("author_association").to::<String>())
+            .as_deref()
+            .map(classify_assoc)
+            .unwrap_or_else(|| classify_user(&login, None)),
+        ),
+        email: None,
+      };
+      user.email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
+      if user.email.is_none() {
+        if let Some(cjson) = &commits_json {
+          if let Some(arr) = cjson.as_array() {
+            for item in arr {
+              let author_login = item.fetch("author.login").to::<String>();
+
+              if author_login.as_deref() == Some(&login) {
+                if let Some(e) = item.fetch("commit.author.email").to::<String>() {
+                  user.email = Some(e);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      user
+    });
+
+    // time_to_merge
+    if let Some(d) = &details {
+      if let (Some(created), Some(merged)) = (
+        d.fetch("created_at").to::<String>(),
+        d.fetch("merged_at").to::<String>(),
+      ) {
+        time_to_merge_seconds = diff_seconds(&created, &merged);
+      }
+    }
+
+    // Final assembly per PR
+    let body_lines = pr_json
+      .fetch("body")
+      .to::<String>()
+      .map(|b| b.lines().map(|s| s.to_string()).collect());
+
+    let created_at = pr_json
+      .fetch("created_at")
+      .to::<String>()
+      .or_else(|| details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()));
+
+    let merged_at = pr_json
+      .fetch("merged_at")
+      .to::<String>()
+      .or_else(|| details.as_ref().and_then(|d| d.fetch("merged_at").to::<String>()));
+
+    let closed_at = pr_json
+      .fetch("closed_at")
+      .to::<String>()
+      .or_else(|| details.as_ref().and_then(|d| d.fetch("closed_at").to::<String>()));
+
+    let diff_url = if html.is_empty() {
+      None
+    } else {
+      Some(format!("{}.diff", html))
+    };
+
+    let patch_url = if html.is_empty() {
+      None
+    } else {
+      Some(format!("{}.patch", html))
+    };
+
+    let reviewers = if reviewers_vec.is_empty() {
+      None
+    } else {
+      Some(reviewers_vec)
+    };
+
+    let commits_vec = api.list_commits_in_pull(&owner, &name, number);
+    let commits_opt = (!commits_vec.is_empty()).then_some(commits_vec);
+
     let item = GithubPullRequest {
-      number: pr_json.fetch("number").to::<i64>().unwrap_or(0),
-      title: pr_json.fetch("title").to_or_default::<String>(),
-      state: pr_json.fetch("state").to_or_default::<String>(),
-      body_lines: pr_json
-        .fetch("body")
-        .to::<String>()
-        .map(|b| b.lines().map(|s| s.to_string()).collect()),
-      created_at: pr_json.fetch("created_at").to::<String>(),
-      merged_at: pr_json.fetch("merged_at").to::<String>(),
-      closed_at: pr_json.fetch("closed_at").to::<String>(),
+      number,
+      title,
+      state,
+      body_lines,
+      created_at,
+      merged_at,
+      closed_at,
       html_url: html.clone(),
-      diff_url: if html.is_empty() {
-        None
-      } else {
-        Some(format!("{}.diff", html))
-      },
-      patch_url: if html.is_empty() {
-        None
-      } else {
-        Some(format!("{}.patch", html))
-      },
+      diff_url,
+      patch_url,
       submitter,
-      approver: None,
-      reviewers: None,
+      approver,
+      reviewers,
       head,
       base,
-      commits: None,
+      commits: commits_opt,
+      review_count,
+      approval_count,
+      change_request_count,
+      time_to_first_review_seconds,
+      time_to_merge_seconds,
     };
     out.push(item);
   }
@@ -311,15 +566,35 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
   Ok(out)
 }
 
+fn classify_user(login: &str, assoc_opt: Option<&str>) -> String {
+  if login.ends_with("[bot]") {
+    return "bot".into();
+  }
+  if let Some(a) = assoc_opt {
+    return classify_assoc(a);
+  }
+  "unknown".into()
+}
+
+fn classify_assoc(a: &str) -> String {
+  let s = a.to_ascii_uppercase();
+
+  match s.as_str() {
+    "OWNER" | "MEMBER" | "COLLABORATOR" => "member".into(),
+    "CONTRIBUTOR" | "FIRST_TIME_CONTRIBUTOR" | "FIRST_TIMER" => "contributor".into(),
+    _ => "other".into(),
+  }
+}
+
+// diff_seconds now lives in crate::util
+
 #[cfg(any(test, feature = "testutil"))]
-#[allow(dead_code)]
 pub fn get_pull_details(owner: &str, name: &str, number: i64, token: &str) -> Option<serde_json::Value> {
   let api = build_api(Some(token.to_string()));
   api.get_pull_details_json(owner, name, number)
 }
 
 #[cfg(any(test, feature = "testutil"))]
-#[allow(dead_code)]
 pub fn list_commits_in_pull(owner: &str, name: &str, number: i64, token: &str) -> Vec<PullRequestCommit> {
   let api = build_api(Some(token.to_string()));
   api.list_commits_in_pull(owner, name, number)
@@ -424,7 +699,10 @@ mod tests {
     assert_eq!(pr.number, 1);
     assert_eq!(pr.title, "Add feature");
     assert_eq!(pr.state, "open");
-    assert_eq!(pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(), Some("octo"));
+    assert_eq!(
+      pr.submitter.as_ref().and_then(|u| u.login.clone()).as_deref(),
+      Some("octo")
+    );
     assert_eq!(pr.head.as_deref(), Some("feature/x"));
     assert_eq!(pr.base.as_deref(), Some("main"));
     assert_eq!(pr.html_url, "https://github.com/openai/example/pull/1");

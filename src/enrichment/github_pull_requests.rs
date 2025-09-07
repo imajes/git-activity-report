@@ -20,6 +20,8 @@ use crate::ext::serde_json::JsonFetch;
 use crate::model::{Commit, CommitGithub, PatchReferencesGithub};
 #[cfg(any(test, feature = "testutil"))]
 use crate::model::{GithubPullRequest, GithubUser};
+#[cfg(any(test, feature = "testutil"))]
+use crate::util::diff_seconds;
 
 /// Enriches a commit with its associated GitHub Pull Request info (best-effort).
 /// Default path uses repository origin and token discovery.
@@ -61,14 +63,16 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
     None => return,
   };
 
-  // Phase 3: build typed PRs (extract-before-build) and attach
+  // Phase 3: build typed PRs (extract-before-build) and attach, including reviewers/approver
   let mut out: Vec<GithubPullRequest> = Vec::with_capacity(arr.len());
+
   for pr_json in arr {
     let html_url = pr_json.fetch("html_url").to_or_default::<String>();
-    let submitter = pr_json.fetch("user.login").to::<String>().map(|login| GithubUser {
+    let submitter_login = pr_json.fetch("user.login").to::<String>();
+    let submitter = submitter_login.clone().map(|login| GithubUser {
       login: Some(login.clone()),
       profile_url: Some(format!("https://github.com/{}", login)),
-      r#type: None,
+      r#type: Some("unknown".into()),
       email: None,
     });
     let head = pr_json.fetch("head.ref").to::<String>();
@@ -105,6 +109,11 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
       head,
       base,
       commits: None,
+      review_count: None,
+      approval_count: None,
+      change_request_count: None,
+      time_to_first_review_seconds: None,
+      time_to_merge_seconds: None,
     };
 
     out.push(item);
@@ -157,9 +166,11 @@ pub fn collect_pull_requests_for_commits_with_api(
   // Phase 2: collect unique PR numbers from commits
   use std::collections::BTreeSet;
   let mut pr_numbers: BTreeSet<i64> = BTreeSet::new();
+
   for commit in commits {
     if let Some(gh) = &commit.github {
       let prs = &gh.pull_requests;
+
       for pr in prs {
         if pr.number > 0 {
           pr_numbers.insert(pr.number);
@@ -178,6 +189,7 @@ pub fn collect_pull_requests_for_commits_with_api(
 
   for number in pr_numbers {
     let details_json = api.get_pull_details_json(owner, name, number);
+
     if let Some(pr_json) = details_json {
       let html_url = pr_json.fetch("html_url").to_or_default::<String>();
       let pr_commits = api.list_commits_in_pull(owner, name, number);
@@ -197,16 +209,31 @@ pub fn collect_pull_requests_for_commits_with_api(
         r#type: None,
         email: None,
       });
+      // Reviews + metrics
+      let mut review_count: Option<i64> = None;
+      let mut approval_count: Option<i64> = None;
+      let mut change_request_count: Option<i64> = None;
+      let mut time_to_first_review_seconds: Option<i64> = None;
+
       // Determine approver: prefer latest APPROVED review; fallback to merged_by
       let mut approver = None;
+
       if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
         if let Some(arr) = reviews_json.as_array() {
+          review_count = Some(arr.len() as i64);
+          let mut approvals = 0i64;
+          let mut changes = 0i64;
+          let mut first_ts: Option<String> = None;
           let mut latest_idx: Option<usize> = None;
           let mut latest_ts: Option<String> = None;
+
           for (i, r) in arr.iter().enumerate() {
             let state = r.fetch("state").to_or_default::<String>();
+
             if state.eq_ignore_ascii_case("APPROVED") {
+              approvals += 1;
               let ts = r.fetch("submitted_at").to::<String>();
+
               match (&latest_ts, ts.as_ref()) {
                 (Some(cur), Some(new_ts)) => {
                   if new_ts > cur {
@@ -222,7 +249,19 @@ pub fn collect_pull_requests_for_commits_with_api(
                   latest_idx = Some(i);
                 }
               }
+            } else if state.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+              changes += 1;
             }
+            if let Some(ts) = r.fetch("submitted_at").to::<String>() {
+              if first_ts.as_ref().map(|cur| ts < *cur).unwrap_or(true) {
+                first_ts = Some(ts);
+              }
+            }
+          }
+          approval_count = Some(approvals);
+          change_request_count = Some(changes);
+          if let (Some(created), Some(first)) = (pr_json.fetch("created_at").to::<String>(), first_ts) {
+            time_to_first_review_seconds = diff_seconds(&created, &first);
           }
           if let Some(i) = latest_idx {
             let login = arr[i].fetch("user.login").to::<String>();
@@ -258,6 +297,10 @@ pub fn collect_pull_requests_for_commits_with_api(
         Some(format!("{}.patch", html_url))
       };
 
+      let time_to_merge_seconds = merged_at
+        .as_ref()
+        .and_then(|m| created_at.as_ref().and_then(|c| diff_seconds(c, m)));
+
       let pr = GithubPullRequest {
         number,
         title,
@@ -275,6 +318,11 @@ pub fn collect_pull_requests_for_commits_with_api(
         head,
         base,
         commits: Some(pr_commits),
+        review_count,
+        approval_count,
+        change_request_count,
+        time_to_first_review_seconds,
+        time_to_merge_seconds,
       };
 
       out.push(pr);
@@ -345,6 +393,11 @@ mod tests {
         head: None,
         base: None,
         commits: None,
+        review_count: None,
+        approval_count: None,
+        change_request_count: None,
+        time_to_first_review_seconds: None,
+        time_to_merge_seconds: None,
       }],
     });
     c

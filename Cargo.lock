@@ -786,6 +786,7 @@ dependencies = [
  "clap_mangen",
  "insta",
  "jsonschema",
+ "once_cell",
  "predicates",
  "proptest",
  "rayon",
