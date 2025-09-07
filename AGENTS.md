@@ -41,7 +41,7 @@ Example patterns:
 ## Cycle Protocol (Strict)
 
 Each agent work cycle must follow these steps:
-1. **Initialize**: `just new-cycle "short description"` or `bash scripts/new_cycle.sh "..."` to create a cycle file under `.agents/cycles/` using `prompt-engineering/TASK_TEMPLATE.md`.
+1. **Initialize**: `just new-cycle "short description"` (or `python scripts/new_cycle.py "..."`) to create a cycle file under `.agents/cycles/` using `prompt-engineering/TASK_TEMPLATE.md`.
 2. **Plan and Implement**: Sketch phases in the cycle file and code directly to these plans; enforce layout and spacing during authoring.
 3. **Local Checks** (pre-PR):
     - Build/tests: `just build && `just test`

@@ -6,7 +6,7 @@ set -euo pipefail
 #  scripts/new_cycle_hook.sh --stdin  (reads ask text from stdin and derives description)
 #
 # Behavior:
-#  - Ensures a new cycle file exists by calling `just new-cycle` (or scripts/new_cycle.sh)
+#  - Ensures a new cycle file exists by calling `just new-cycle` (or scripts/new_cycle.py)
 #  - Exports AGENT_CYCLE_FILE and AGENT_OVERLAY_JSON for the calling process
 #  - Optionally appends the raw ask into the new cycle file under an "Ask" section
 
@@ -52,7 +52,7 @@ fi
 if command -v just >/dev/null 2>&1; then
   just new-cycle "$desc" >/dev/null
 else
-  bash "$(dirname "$0")/new_cycle.sh" "$desc" >/dev/null
+  python "$(dirname "$0")/new_cycle.py" "$desc" >/dev/null
 fi
 
 CYC_DIR="$GITROOT/.agents/cycles"
@@ -73,4 +73,3 @@ export AGENT_CYCLE_FILE="$latest"
 export AGENT_OVERLAY_JSON="$overlay"
 
 echo "$latest"
-
