@@ -34,6 +34,7 @@ Example patterns:
 - Assign, then push:
   - **Correct:** `let pr = GithubPullRequest { ... }; out.push(pr);`
   - **Incorrect:** `out.push(GithubPullRequest { ... });`
+  - Spacing: when you bind a literal/struct (compute) and then mutate a collection (push/insert), insert exactly one blank line between the assignment and the push.
 - Split compute and I/O by blank lines.
   - **Correct:** compute → blank → write → blank → push
 - Use early guards to flatten code; avoid deep nesting in `if` blocks.

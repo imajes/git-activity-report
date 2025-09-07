@@ -117,6 +117,7 @@ pub fn save_range_report(
   } else {
     None
   };
+
   Ok((entry, print_json))
 }
 
@@ -163,12 +164,14 @@ pub fn process_ranges(
       "{}",
       serde_json::to_string_pretty(&serde_json::json!({"dir": base_dir, "manifest": "manifest.json"}))?
     );
+
     return Ok(());
   }
 
   if let Some(v) = last_single_output {
     println!("{}", serde_json::to_string_pretty(&v)?);
   }
+
   Ok(())
 }
 

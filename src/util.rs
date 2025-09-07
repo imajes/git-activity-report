@@ -121,6 +121,7 @@ pub fn prepare_out_dir(out: &str, now_opt: Option<DateTime<Local>>) -> anyhow::R
       .to_string()
   };
   std::fs::create_dir_all(&dir)?;
+
   Ok(dir)
 }
 
@@ -130,7 +131,9 @@ pub fn render_man_page<T: CommandFactory>() -> anyhow::Result<String> {
   let cmd = T::command();
   let man = clap_mangen::Man::new(cmd);
   let mut buf: Vec<u8> = Vec::new();
+
   man.render(&mut buf)?;
+
   Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
