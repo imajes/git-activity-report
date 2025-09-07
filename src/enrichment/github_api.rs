@@ -143,14 +143,7 @@ impl GithubCachedApi {
 
   #[inline]
   fn key3(a: &str, b: &str, c: &str) -> String {
-    let mut s = String::with_capacity(a.len() + b.len() + c.len() + 2);
-    s.push_str(a);
-    s.push(':');
-    s.push_str(b);
-    s.push(':');
-    s.push_str(c);
-
-    s
+    format!("{}:{}:{}", a, b, c)
   }
 
   #[inline]
