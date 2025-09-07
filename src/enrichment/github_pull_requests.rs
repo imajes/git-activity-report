@@ -285,99 +285,103 @@ pub fn collect_pull_requests_for_commits_with_api(
   let mut out: Vec<GithubPullRequest> = Vec::with_capacity(pr_numbers.len());
 
   for number in pr_numbers {
-    let details_json = api.get_pull_details_json(owner, name, number);
-
-    if let Some(pr_json) = details_json {
-      let html_url = pr_json.fetch("html_url").to_or_default::<String>();
-      let pr_commits = api.list_commits_in_pull(owner, name, number);
-
-      let title = pr_json.fetch("title").to_or_default::<String>();
-      let state = pr_json.fetch("state").to_or_default::<String>();
-      let created_at = pr_json.fetch("created_at").to::<String>();
-      let merged_at = pr_json.fetch("merged_at").to::<String>();
-      let closed_at = pr_json.fetch("closed_at").to::<String>();
-      let body_lines = pr_json
-        .fetch("body")
-        .to::<String>()
-        .map(|b| b.lines().map(|s| s.to_string()).collect());
-      let submitter = pr_json.fetch("user.login").to::<String>().map(|login| GithubUser {
-        login: Some(login.clone()),
-        profile_url: Some(format!("https://github.com/{}", login)),
-        r#type: None,
-        email: None,
-      });
-      // Reviews + metrics
-      let mut review_count: Option<i64> = None;
-      let mut approval_count: Option<i64> = None;
-      let mut change_request_count: Option<i64> = None;
-      let mut time_to_first_review_seconds: Option<i64> = None;
-
-      // Determine approver: prefer latest APPROVED review; fallback to merged_by
-      let mut approver = None;
-
-      if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
-        if let Some(arr) = reviews_json.as_array() {
-          review_count = Some(arr.len() as i64);
-
-          let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr);
-
-          approval_count = Some(approvals);
-          change_request_count = Some(changes);
-
-          let created_for_first = pr_json.fetch("created_at").to::<String>();
-
-          if let (Some(created), Some(first)) = (created_for_first, first_ts) {
-            time_to_first_review_seconds = diff_seconds(&created, &first);
-          }
-
-          if let Some(login) = latest_login {
-            approver = Some(build_github_user(api, &login, None));
-          }
-        }
-      }
-      if approver.is_none() {
-        let merged_by_login = pr_json.fetch("merged_by.login").to::<String>();
-        approver = merged_by_login.map(|login| build_github_user(api, &login, None));
-      }
-      let head = pr_json.fetch("head.ref").to::<String>();
-      let base = pr_json.fetch("base.ref").to::<String>();
-
-      let (diff_url, patch_url) = urls_from_html(&html_url);
-
-      let time_to_merge_seconds = merged_at
-        .as_ref()
-        .and_then(|m| created_at.as_ref().and_then(|c| diff_seconds(c, m)));
-
-      let pr = GithubPullRequest {
-        number,
-        title,
-        state,
-        body_lines,
-        created_at,
-        merged_at,
-        closed_at,
-        html_url,
-        diff_url,
-        patch_url,
-        submitter,
-        approver,
-        reviewers: None,
-        head,
-        base,
-        commits: Some(pr_commits),
-        review_count,
-        approval_count,
-        change_request_count,
-        time_to_first_review_seconds,
-        time_to_merge_seconds,
-      };
-
+    if let Some(pr_json) = api.get_pull_details_json(owner, name, number) {
+      let pr = build_aggregated_pr(number, &pr_json, owner, name, api);
       out.push(pr);
     }
   }
 
   // Finalize
   Some(out)
+}
+
+#[cfg(any(test, feature = "testutil"))]
+fn build_aggregated_pr(
+  number: i64,
+  pr_json: &serde_json::Value,
+  owner: &str,
+  name: &str,
+  api: &dyn GithubApi,
+) -> GithubPullRequest {
+  let html_url = pr_json.fetch("html_url").to_or_default::<String>();
+  let pr_commits = api.list_commits_in_pull(owner, name, number);
+
+  let title = pr_json.fetch("title").to_or_default::<String>();
+  let state = pr_json.fetch("state").to_or_default::<String>();
+  let created_at = pr_json.fetch("created_at").to::<String>();
+  let merged_at = pr_json.fetch("merged_at").to::<String>();
+  let closed_at = pr_json.fetch("closed_at").to::<String>();
+  let body_lines = pr_json
+    .fetch("body")
+    .to::<String>()
+    .map(|b| b.lines().map(|s| s.to_string()).collect());
+  let submitter = pr_json.fetch("user.login").to::<String>().map(|login| GithubUser {
+    login: Some(login.clone()),
+    profile_url: Some(format!("https://github.com/{}", login)),
+    r#type: None,
+    email: None,
+  });
+
+  // Reviews + metrics
+  let mut review_count: Option<i64> = None;
+  let mut approval_count: Option<i64> = None;
+  let mut change_request_count: Option<i64> = None;
+  let mut time_to_first_review_seconds: Option<i64> = None;
+  let mut approver = None;
+
+  if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
+    if let Some(arr) = reviews_json.as_array() {
+      review_count = Some(arr.len() as i64);
+      let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr);
+      approval_count = Some(approvals);
+      change_request_count = Some(changes);
+
+      let created_for_first = pr_json.fetch("created_at").to::<String>();
+
+      if let (Some(created), Some(first)) = (created_for_first, first_ts) {
+        time_to_first_review_seconds = diff_seconds(&created, &first);
+      }
+
+      if let Some(login) = latest_login {
+        approver = Some(build_github_user(api, &login, None));
+      }
+    }
+  }
+  if approver.is_none() {
+    let merged_by_login = pr_json.fetch("merged_by.login").to::<String>();
+    approver = merged_by_login.map(|login| build_github_user(api, &login, None));
+  }
+
+  let head = pr_json.fetch("head.ref").to::<String>();
+  let base = pr_json.fetch("base.ref").to::<String>();
+  let (diff_url, patch_url) = urls_from_html(&html_url);
+  let time_to_merge_seconds = merged_at
+    .as_ref()
+    .and_then(|m| created_at.as_ref().and_then(|c| diff_seconds(c, m)));
+
+  GithubPullRequest {
+    number,
+    title,
+    state,
+    body_lines,
+    created_at,
+    merged_at,
+    closed_at,
+    html_url,
+    diff_url,
+    patch_url,
+    submitter,
+    approver,
+    reviewers: None,
+    head,
+    base,
+    commits: Some(pr_commits),
+    review_count,
+    approval_count,
+    change_request_count,
+    time_to_first_review_seconds,
+    time_to_merge_seconds,
+  }
 }
 
 #[cfg(test)]
