@@ -658,6 +658,87 @@ mod tests {
   }
 
   #[test]
+  #[serial]
+  fn seam_enrich_commit_with_env_api_sets_pr_urls() {
+    let td = init_git_repo_with_origin();
+    let repo = td.path().to_str().unwrap();
+    std::env::set_var(
+      "GAR_TEST_PR_JSON",
+      serde_json::json!([{ "html_url": "https://github.com/openai/example/pull/10", "number": 10, "title": "T", "state": "open" }]).to_string(),
+    );
+    let api = ghapi::make_env_api();
+    let mut c = minimal_commit_with_pr(0);
+    enrich_with_github_prs_with_api(&mut c, repo, api.as_ref());
+    let pr = &c.github.as_ref().unwrap().pull_requests[0];
+    assert!(pr.diff_url.as_ref().unwrap().ends_with(".diff"));
+    assert!(pr.patch_url.as_ref().unwrap().ends_with(".patch"));
+    std::env::remove_var("GAR_TEST_PR_JSON");
+  }
+
+  #[test]
+  #[serial]
+  fn aggregator_time_metrics() {
+    std::env::set_var("GITHUB_TOKEN", "x");
+    std::env::set_var(
+      "GAR_TEST_PULL_DETAILS_JSON",
+      serde_json::json!({
+        "html_url": "https://github.com/openai/example/pull/3",
+        "number": 3,
+        "title": "Timing",
+        "state": "closed",
+        "user": {"login": "octo"},
+        "head": {"ref": "feature/t"},
+        "base": {"ref": "main"},
+        "created_at": "2024-01-01T00:00:00Z",
+        "closed_at": "2024-01-03T00:00:00Z",
+        "merged_at": "2024-01-03T00:00:00Z"
+      })
+      .to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_REVIEWS_JSON",
+      serde_json::json!([
+        {"state": "COMMENTED", "user": {"login": "x"}, "submitted_at": "2024-01-01T12:00:00Z"}
+      ])
+      .to_string(),
+    );
+    std::env::set_var(
+      "GAR_TEST_PR_COMMITS_JSON",
+      serde_json::json!([{ "sha": "abc1234", "commit": {"message": "Subject\nBody"}}]).to_string(),
+    );
+    let commits = vec![minimal_commit_with_pr(3)];
+    let out = collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), ghapi::make_env_api().as_ref()).unwrap();
+    let pr = &out[0];
+    assert_eq!(pr.time_to_first_review_seconds, Some(12 * 3600));
+    assert_eq!(pr.time_to_merge_seconds, Some(2 * 24 * 3600));
+    std::env::remove_var("GITHUB_TOKEN");
+    std::env::remove_var("GAR_TEST_PULL_DETAILS_JSON");
+    std::env::remove_var("GAR_TEST_PR_COMMITS_JSON");
+    std::env::remove_var("GAR_TEST_PR_REVIEWS_JSON");
+  }
+
+  #[test]
+  fn unit_compute_review_metrics_missing_submitted_at() {
+    let arr = json!([
+      {"state": "APPROVED", "user": {"login": "approver"}},
+      {"state": "COMMENTED", "user": {"login": "c"}, "submitted_at": "2024-02-01T01:00:00Z"}
+    ]);
+    let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr.as_array().unwrap());
+    assert_eq!(approvals, 1);
+    assert_eq!(changes, 0);
+    assert_eq!(first_ts.as_deref(), Some("2024-02-01T01:00:00Z"));
+    assert!(latest_login.is_none());
+  }
+
+  #[test]
+  fn unit_build_github_user_contributor() {
+    let api = DummyApi;
+    let u = build_github_user(&api, "foo", Some("FIRST_TIME_CONTRIBUTOR"));
+    assert_eq!(u.r#type.as_deref(), Some("contributor"));
+    assert!(u.email.is_none());
+  }
+
+  #[test]
   fn unit_compute_review_metrics_orders_and_counts() {
     let arr = json!([
       {"state": "APPROVED", "user": {"login": "alice"}, "submitted_at": "2024-02-01T02:00:00Z"},
