@@ -498,41 +498,9 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     }
 
     // Submitter
-    let submitter = submitter_login.clone().map(|login| {
-      let mut user = GithubUser {
-        login: Some(login.clone()),
-        profile_url: Some(format!("https://github.com/{}", login)),
-        r#type: Some(
-          details
-            .as_ref()
-            .and_then(|d| d.fetch("author_association").to::<String>())
-            .as_deref()
-            .map(classify_assoc)
-            .unwrap_or_else(|| classify_user(&login, None)),
-        ),
-        email: None,
-      };
-      let email_from_user = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
-
-      let commit_items_opt = commits_json.as_ref().and_then(|c| c.as_array());
-
-      let email_from_commits = commit_items_opt.and_then(|commit_items| {
-        commit_items.iter().find_map(|commit_item| {
-          let author_login = commit_item.fetch("author.login").to::<String>();
-
-          if author_login.as_deref() == Some(login.as_str()) {
-            return commit_item.fetch("commit.author.email").to::<String>();
-          }
-
-          None
-        })
-      });
-
-      let resolved_email = email_from_user.or(email_from_commits);
-
-      user.email = resolved_email;
-      user
-    });
+    let submitter = submitter_login
+      .as_ref()
+      .map(|login| build_submitter_user(api.as_ref(), login, commits_json.as_ref(), details.as_ref()));
 
     // time_to_merge
     if let Some(d) = &details {
@@ -550,14 +518,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       .to::<String>()
       .map(|b| b.lines().map(|s| s.to_string()).collect());
 
-    let created_at_primary = pr_json.fetch("created_at").to::<String>();
-    let created_at = created_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("created_at").to::<String>()));
-
-    let merged_at_primary = pr_json.fetch("merged_at").to::<String>();
-    let merged_at = merged_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("merged_at").to::<String>()));
-
-    let closed_at_primary = pr_json.fetch("closed_at").to::<String>();
-    let closed_at = closed_at_primary.or_else(|| details.as_ref().and_then(|d| d.fetch("closed_at").to::<String>()));
+    let (created_at, merged_at, closed_at) = resolve_timestamps(pr_json, details.as_ref());
 
     let (diff_url, patch_url) = urls_from_html(&html);
 
@@ -708,7 +669,68 @@ fn process_reviews(
     None
   };
 
-  (rev_arr.len() as i64, approvals, changes, time_to_first, approver, reviewers_vec)
+  (
+    rev_arr.len() as i64,
+    approvals,
+    changes,
+    time_to_first,
+    approver,
+    reviewers_vec,
+  )
+}
+
+fn resolve_timestamps(
+  pr_json: &serde_json::Value,
+  details: Option<&serde_json::Value>,
+) -> (Option<String>, Option<String>, Option<String>) {
+  let created_at_primary = pr_json.fetch("created_at").to::<String>();
+  let created_at = created_at_primary.or_else(|| details.and_then(|d| d.fetch("created_at").to::<String>()));
+
+  let merged_at_primary = pr_json.fetch("merged_at").to::<String>();
+  let merged_at = merged_at_primary.or_else(|| details.and_then(|d| d.fetch("merged_at").to::<String>()));
+
+  let closed_at_primary = pr_json.fetch("closed_at").to::<String>();
+  let closed_at = closed_at_primary.or_else(|| details.and_then(|d| d.fetch("closed_at").to::<String>()));
+
+  (created_at, merged_at, closed_at)
+}
+
+fn build_submitter_user(
+  api: &dyn GithubApi,
+  login: &str,
+  commits_json: Option<&serde_json::Value>,
+  details: Option<&serde_json::Value>,
+) -> GithubUser {
+  let user_type = details
+    .and_then(|d| d.fetch("author_association").to::<String>())
+    .as_deref()
+    .map(classify_assoc)
+    .unwrap_or_else(|| classify_user(login, None));
+
+  let email_from_user = api.get_user_json(login).and_then(|u| u.fetch("email").to::<String>());
+
+  let email_from_commits = commits_json
+    .and_then(|c| c.as_array())
+    .and_then(|commit_items| {
+      commit_items.iter().find_map(|commit_item| {
+        let author_login = commit_item.fetch("author.login").to::<String>();
+
+        if author_login.as_deref() == Some(login) {
+          return commit_item.fetch("commit.author.email").to::<String>();
+        }
+
+        None
+      })
+    });
+
+  let resolved_email = email_from_user.or(email_from_commits);
+
+  GithubUser {
+    login: Some(login.to_string()),
+    profile_url: Some(format!("https://github.com/{}", login)),
+    r#type: Some(user_type),
+    email: resolved_email,
+  }
 }
 
 fn classify_user(login: &str, assoc_opt: Option<&str>) -> String {
