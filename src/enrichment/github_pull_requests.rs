@@ -45,9 +45,7 @@ fn urls_from_html(html_url: &str) -> (Option<String>, Option<String>) {
 #[cfg(any(test, feature = "testutil"))]
 fn build_github_user(api: &dyn GithubApi, login: &str, assoc_opt: Option<&str>) -> GithubUser {
   let user_json = api.get_user_json(login);
-  let email = user_json
-    .as_ref()
-    .and_then(|u| u.fetch("email").to::<String>());
+  let email = user_json.as_ref().and_then(|u| u.fetch("email").to::<String>());
 
   let mut user_type = if login.ends_with("[bot]") {
     "bot".to_string()
@@ -385,8 +383,8 @@ pub fn collect_pull_requests_for_commits_with_api(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use serial_test::serial;
   use serde_json::json;
+  use serial_test::serial;
 
   fn minimal_commit_with_pr(num: i64) -> Commit {
     let mut c = Commit {
@@ -707,7 +705,9 @@ mod tests {
       serde_json::json!([{ "sha": "abc1234", "commit": {"message": "Subject\nBody"}}]).to_string(),
     );
     let commits = vec![minimal_commit_with_pr(3)];
-    let out = collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), ghapi::make_env_api().as_ref()).unwrap();
+    let out =
+      collect_pull_requests_for_commits_with_api(&commits, ("openai", "example"), ghapi::make_env_api().as_ref())
+        .unwrap();
     let pr = &out[0];
     assert_eq!(pr.time_to_first_review_seconds, Some(12 * 3600));
     assert_eq!(pr.time_to_merge_seconds, Some(2 * 24 * 3600));
@@ -769,11 +769,21 @@ mod tests {
   struct DummyApi;
   #[cfg(any(test, feature = "testutil"))]
   impl ghapi::GithubApi for DummyApi {
-    fn list_pulls_for_commit_json(&self, _o: &str, _n: &str, _s: &str) -> Option<serde_json::Value> { None }
-    fn get_pull_details_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
-    fn list_commits_in_pull(&self, _o: &str, _n: &str, _num: i64) -> Vec<crate::model::PullRequestCommit> { Vec::new() }
-    fn list_reviews_for_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
-    fn list_commits_in_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> { None }
+    fn list_pulls_for_commit_json(&self, _o: &str, _n: &str, _s: &str) -> Option<serde_json::Value> {
+      None
+    }
+    fn get_pull_details_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> {
+      None
+    }
+    fn list_commits_in_pull(&self, _o: &str, _n: &str, _num: i64) -> Vec<crate::model::PullRequestCommit> {
+      Vec::new()
+    }
+    fn list_reviews_for_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> {
+      None
+    }
+    fn list_commits_in_pull_json(&self, _o: &str, _n: &str, _num: i64) -> Option<serde_json::Value> {
+      None
+    }
     fn get_user_json(&self, login: &str) -> Option<serde_json::Value> {
       match login {
         "alice" => Some(json!({"email": "alice@example.com", "type": "User"})),
