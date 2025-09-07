@@ -30,6 +30,14 @@ pub struct ProcessContext<'a> {
   pub max_patch_bytes: usize,
 }
 
+/// Sums additions and deletions across a slice of `FileEntry`s.
+pub fn sum_additions_deletions(files: &[FileEntry]) -> (i64, i64) {
+  let additions: i64 = files.iter().map(|f| f.additions.unwrap_or(0)).sum();
+  let deletions: i64 = files.iter().map(|f| f.deletions.unwrap_or(0)).sum();
+
+  (additions, deletions)
+}
+
 /// Builds a vector of `FileEntry` structs for a given commit.
 pub fn build_file_entries(repo: &str, sha: &str) -> Result<Vec<FileEntry>> {
   let (num_list, num_map) = gitio::commit_numstat(repo, sha)?;
@@ -78,8 +86,7 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
 
   // Synthesize a shortstat-like summary from numstat-derived entries to avoid an extra git call.
   let files_changed = files.len();
-  let additions: i64 = files.iter().map(|f| f.additions.unwrap_or(0)).sum();
-  let deletions: i64 = files.iter().map(|f| f.deletions.unwrap_or(0)).sum();
+  let (additions, deletions) = sum_additions_deletions(&files);
   let file_word = if files_changed == 1 { "file" } else { "files" };
   let ins_word = if additions == 1 { "insertion" } else { "insertions" };
   let del_word = if deletions == 1 { "deletion" } else { "deletions" };

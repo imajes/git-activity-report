@@ -23,17 +23,110 @@ use crate::model::{GithubPullRequest, GithubUser};
 #[cfg(any(test, feature = "testutil"))]
 use crate::util::diff_seconds;
 
+// --- Local helpers to unify repeated patterns ---
+fn commit_patch_refs(owner: &str, name: &str, sha: &str) -> PatchReferencesGithub {
+  let base = format!("https://github.com/{}/{}/commit/{}", owner, name, sha);
+  PatchReferencesGithub {
+    commit_url: Some(base.clone()),
+    diff_url: Some(format!("{}.diff", base)),
+    patch_url: Some(format!("{}.patch", base)),
+  }
+}
+
+#[cfg(any(test, feature = "testutil"))]
+fn urls_from_html(html_url: &str) -> (Option<String>, Option<String>) {
+  if html_url.is_empty() {
+    (None, None)
+  } else {
+    (Some(format!("{}.diff", html_url)), Some(format!("{}.patch", html_url)))
+  }
+}
+
+#[cfg(any(test, feature = "testutil"))]
+fn build_github_user(api: &dyn GithubApi, login: &str, assoc_opt: Option<&str>) -> GithubUser {
+  let user_json = api.get_user_json(login);
+  let email = user_json
+    .as_ref()
+    .and_then(|u| u.fetch("email").to::<String>());
+
+  let mut user_type = if login.ends_with("[bot]") {
+    "bot".to_string()
+  } else if let Some(a) = assoc_opt {
+    classify_assoc_local(a)
+  } else {
+    "unknown".to_string()
+  };
+
+  if user_type.as_str() == "unknown" {
+    let is_bot_json = user_json
+      .as_ref()
+      .and_then(|u| u.fetch("type").to::<String>())
+      .map(|t| t.eq_ignore_ascii_case("Bot"))
+      .unwrap_or(false);
+
+    if is_bot_json || login.ends_with("[bot]") {
+      user_type = "bot".to_string();
+    }
+  }
+
+  GithubUser {
+    login: Some(login.to_string()),
+    profile_url: Some(format!("https://github.com/{}", login)),
+    r#type: Some(user_type),
+    email,
+  }
+}
+
+#[cfg(any(test, feature = "testutil"))]
+fn classify_assoc_local(a: &str) -> String {
+  let s = a.to_ascii_uppercase();
+  match s.as_str() {
+    "OWNER" | "MEMBER" | "COLLABORATOR" => "member".into(),
+    "CONTRIBUTOR" | "FIRST_TIME_CONTRIBUTOR" | "FIRST_TIMER" => "contributor".into(),
+    _ => "other".into(),
+  }
+}
+
+#[cfg(any(test, feature = "testutil"))]
+fn compute_review_metrics(arr: &[serde_json::Value]) -> (i64, i64, Option<String>, Option<String>) {
+  let mut approvals = 0i64;
+  let mut changes = 0i64;
+  let mut first_ts: Option<String> = None;
+  let mut latest_ts: Option<String> = None;
+  let mut latest_login: Option<String> = None;
+
+  for r in arr.iter() {
+    let state = r.fetch("state").to_or_default::<String>();
+    let login_opt = r.fetch("user.login").to::<String>();
+    let submitted = r.fetch("submitted_at").to::<String>();
+
+    if let Some(ts) = &submitted {
+      if first_ts.as_ref().map(|cur| ts < cur).unwrap_or(true) {
+        first_ts = Some(ts.clone());
+      }
+    }
+
+    if state.eq_ignore_ascii_case("APPROVED") {
+      approvals += 1;
+      if let Some(ts) = &submitted {
+        if latest_ts.as_ref().map(|cur| ts > cur).unwrap_or(true) {
+          latest_ts = Some(ts.clone());
+          latest_login = login_opt.clone();
+        }
+      }
+    } else if state.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+      changes += 1;
+    }
+  }
+
+  (approvals, changes, first_ts, latest_login)
+}
+
 /// Enriches a commit with its associated GitHub Pull Request info (best-effort).
 /// Default path uses repository origin and token discovery.
 pub fn enrich_with_github_prs(commit: &mut Commit, repo: &str) {
   if let Some((owner, name)) = ghapi::parse_origin_github(repo) {
-    let base = format!("https://github.com/{}/{}/commit/{}", owner, name, commit.sha);
-    let gh_urls = PatchReferencesGithub {
-      commit_url: Some(base.clone()),
-      diff_url: Some(format!("{}.diff", base)),
-      patch_url: Some(format!("{}.patch", base)),
-    };
-    commit.patch_references.github = Some(gh_urls);
+    commit.patch_references.github = Some(commit_patch_refs(&owner, &name, &commit.sha));
   }
 
   if let Ok(prs) = ghapi::try_fetch_prs_for_commit(repo, &commit.sha) {
@@ -53,15 +146,8 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
   };
 
   // Compute GitHub commit/patch/diff URLs from origin + sha.
-  let base = format!("https://github.com/{}/{}/commit/{}", owner, name, commit.sha);
-  let gh_urls = PatchReferencesGithub {
-    commit_url: Some(base.clone()),
-    diff_url: Some(format!("{}.diff", base)),
-    patch_url: Some(format!("{}.patch", base)),
-  };
-
   // Attach URLs to commit.
-  commit.patch_references.github = Some(gh_urls);
+  commit.patch_references.github = Some(commit_patch_refs(&owner, &name, &commit.sha));
 
   // Phase 2: fetch JSON array via api; early guard on missing/shape
   let parsed = match api.list_pulls_for_commit_json(&owner, &name, &commit.sha) {
@@ -103,16 +189,7 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
     let merged_at = pr_json.fetch("merged_at").to::<String>();
     let closed_at = pr_json.fetch("closed_at").to::<String>();
 
-    let diff_url = if html_url.is_empty() {
-      None
-    } else {
-      Some(format!("{}.diff", html_url))
-    };
-    let patch_url = if html_url.is_empty() {
-      None
-    } else {
-      Some(format!("{}.patch", html_url))
-    };
+    let (diff_url, patch_url) = urls_from_html(&html_url);
 
     let item = GithubPullRequest {
       number,
@@ -243,43 +320,9 @@ pub fn collect_pull_requests_for_commits_with_api(
       if let Some(reviews_json) = api.list_reviews_for_pull_json(owner, name, number) {
         if let Some(arr) = reviews_json.as_array() {
           review_count = Some(arr.len() as i64);
-          let mut approvals = 0i64;
-          let mut changes = 0i64;
-          let mut first_ts: Option<String> = None;
-          let mut latest_idx: Option<usize> = None;
-          let mut latest_ts: Option<String> = None;
 
-          for (i, r) in arr.iter().enumerate() {
-            let state = r.fetch("state").to_or_default::<String>();
+          let (approvals, changes, first_ts, latest_login) = compute_review_metrics(arr);
 
-            if state.eq_ignore_ascii_case("APPROVED") {
-              approvals += 1;
-              let ts = r.fetch("submitted_at").to::<String>();
-
-              match (&latest_ts, ts.as_ref()) {
-                (Some(cur), Some(new_ts)) => {
-                  if new_ts > cur {
-                    latest_ts = Some(new_ts.clone());
-                    latest_idx = Some(i);
-                  }
-                }
-                (None, Some(new_ts)) => {
-                  latest_ts = Some(new_ts.clone());
-                  latest_idx = Some(i);
-                }
-                _ => {
-                  latest_idx = Some(i);
-                }
-              }
-            } else if state.eq_ignore_ascii_case("CHANGES_REQUESTED") {
-              changes += 1;
-            }
-            if let Some(ts) = r.fetch("submitted_at").to::<String>() {
-              if first_ts.as_ref().map(|cur| ts < *cur).unwrap_or(true) {
-                first_ts = Some(ts);
-              }
-            }
-          }
           approval_count = Some(approvals);
           change_request_count = Some(changes);
 
@@ -288,39 +331,20 @@ pub fn collect_pull_requests_for_commits_with_api(
           if let (Some(created), Some(first)) = (created_for_first, first_ts) {
             time_to_first_review_seconds = diff_seconds(&created, &first);
           }
-          if let Some(i) = latest_idx {
-            let login = arr[i].fetch("user.login").to::<String>();
-            approver = login.map(|l| GithubUser {
-              login: Some(l.clone()),
-              profile_url: Some(format!("https://github.com/{}", l)),
-              r#type: None,
-              email: None,
-            });
+
+          if let Some(login) = latest_login {
+            approver = Some(build_github_user(api, &login, None));
           }
         }
       }
       if approver.is_none() {
         let merged_by_login = pr_json.fetch("merged_by.login").to::<String>();
-        approver = merged_by_login.map(|login| GithubUser {
-          login: Some(login.clone()),
-          profile_url: Some(format!("https://github.com/{}", login)),
-          r#type: None,
-          email: None,
-        });
+        approver = merged_by_login.map(|login| build_github_user(api, &login, None));
       }
       let head = pr_json.fetch("head.ref").to::<String>();
       let base = pr_json.fetch("base.ref").to::<String>();
 
-      let diff_url = if html_url.is_empty() {
-        None
-      } else {
-        Some(format!("{}.diff", html_url))
-      };
-      let patch_url = if html_url.is_empty() {
-        None
-      } else {
-        Some(format!("{}.patch", html_url))
-      };
+      let (diff_url, patch_url) = urls_from_html(&html_url);
 
       let time_to_merge_seconds = merged_at
         .as_ref()
