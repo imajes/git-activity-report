@@ -836,11 +836,11 @@ mod tests {
   #[test]
   fn unit_dummy_api_smoke() {
     let api = DummyApi;
-    assert!(api.list_pulls_for_commit_json("o","r","s").is_none());
-    assert!(api.get_pull_details_json("o","r",1).is_none());
-    assert!(api.list_commits_in_pull("o","r",1).is_empty());
-    assert!(api.list_reviews_for_pull_json("o","r",1).is_none());
-    assert!(api.list_commits_in_pull_json("o","r",1).is_none());
+    assert!(api.list_pulls_for_commit_json("o", "r", "s").is_none());
+    assert!(api.get_pull_details_json("o", "r", 1).is_none());
+    assert!(api.list_commits_in_pull("o", "r", 1).is_empty());
+    assert!(api.list_reviews_for_pull_json("o", "r", 1).is_none());
+    assert!(api.list_commits_in_pull_json("o", "r", 1).is_none());
     assert!(api.get_user_json("nobody").is_none());
   }
 }

@@ -37,6 +37,87 @@ fn write_pretty_json<P: AsRef<std::path::Path>>(path: P, v: &serde_json::Value) 
   Ok(())
 }
 
+/// Outcome of saving a per-range report.
+///
+/// - `entry`: manifest entry when `multi_windows` is set.
+/// - `to_print`: JSON to print to stdout for single runs, or pointer when single split.
+pub struct SaveOutcome {
+  pub entry: Option<RangeEntry>,
+  pub to_print: Option<serde_json::Value>,
+}
+
+/// Resolve the relative report filename for a range, depending on mode.
+///
+/// - When `split_apart` is true, the renderer returns a JSON pointer with a `file` we reuse.
+/// - When `multi_windows` (non-split) is active, standardize to `report-<label>.json`.
+/// - For a single non-split run, there is no relative file (we print JSON or write to `--out`).
+fn resolve_file_rel(
+  report_json: &serde_json::Value,
+  cfg: &cli::EffectiveConfig,
+  range: &LabeledRange,
+  base_dir_opt: Option<&str>,
+) -> Option<String> {
+  if cfg.split_apart {
+    let file_json = report_json.get("file");
+    let file_rel = file_json.and_then(|v| v.as_str());
+
+    return file_rel.map(|s| s.to_string());
+  }
+
+  if base_dir_opt.is_some() {
+    let file_rel = format!("report-{}.json", range.label);
+
+    return Some(file_rel);
+  }
+
+  None
+}
+
+/// Write report to `--out` (file or dir) or return it for stdout when appropriate.
+///
+/// Returns `Some(report_json)` when the caller should print; `None` when written to disk.
+fn write_or_print(
+  out_path_or_dir: &str,
+  report_json: serde_json::Value,
+  label: &str,
+) -> anyhow::Result<Option<serde_json::Value>> {
+  if out_path_or_dir == "-" {
+    return Ok(Some(report_json));
+  }
+
+  let out_path = std::path::Path::new(out_path_or_dir);
+  let is_dir_like = out_path_or_dir.ends_with('/') || out_path.is_dir();
+
+  if is_dir_like {
+    std::fs::create_dir_all(out_path)?;
+
+    let file_path = out_path.join(format!("report-{}.json", label));
+    let count = commit_count(&report_json);
+
+    if count == 0 {
+      return Ok(Some(report_json));
+    }
+
+    write_pretty_json(&file_path, &report_json)?;
+
+    return Ok(None);
+  }
+
+  if let Some(parent) = out_path.parent() {
+    std::fs::create_dir_all(parent)?;
+  }
+
+  let count = commit_count(&report_json);
+
+  if count == 0 {
+    return Ok(Some(report_json));
+  }
+
+  write_pretty_json(out_path, &report_json)?;
+
+  Ok(None)
+}
+
 pub fn generate_range_report(
   cfg: &cli::EffectiveConfig,
   range: &LabeledRange,
@@ -63,51 +144,19 @@ pub fn save_range_report(
   range: &LabeledRange,
   report: serde_json::Value,
   base_dir_opt: Option<&str>,
-) -> Result<(Option<RangeEntry>, Option<serde_json::Value>)> {
-  let file_rel = if cfg.split_apart {
-    report.get("file").and_then(|v| v.as_str()).map(|s| s.to_string())
-  } else if base_dir_opt.is_some() {
-    Some(format!("report-{}.json", range.label))
-  } else {
-    None
-  };
+) -> Result<SaveOutcome> {
+  let file_rel = resolve_file_rel(&report, cfg, range, base_dir_opt);
 
   let mut print_json: Option<serde_json::Value> = None;
 
   if !cfg.split_apart {
     if let Some(base_dir) = base_dir_opt {
-      let file_path = std::path::Path::new(base_dir).join(file_rel.as_ref().expect("file name for multi"));
+      let file_name = file_rel.as_ref().expect("file name for multi");
+      let file_path = std::path::Path::new(base_dir).join(file_name);
+
       write_pretty_json(&file_path, &report)?;
-    } else if cfg.out != "-" {
-      let out_path = std::path::Path::new(&cfg.out);
-      let is_dir_like = cfg.out.ends_with('/') || out_path.is_dir();
-
-      if is_dir_like {
-        let label = &range.label;
-        std::fs::create_dir_all(out_path)?;
-        let file_path = out_path.join(format!("report-{}.json", label));
-        // If count==0, do not write a file; print JSON instead
-        let count = commit_count(&report);
-
-        if count == 0 {
-          print_json = Some(report);
-        } else {
-          write_pretty_json(&file_path, &report)?;
-        }
-      } else {
-        if let Some(parent) = out_path.parent() {
-          std::fs::create_dir_all(parent)?;
-        }
-        let count = commit_count(&report);
-
-        if count == 0 {
-          print_json = Some(report);
-        } else {
-          write_pretty_json(out_path, &report)?;
-        }
-      }
     } else {
-      print_json = Some(report);
+      print_json = write_or_print(&cfg.out, report, &range.label)?;
     }
   } else if !cfg.multi_windows {
     print_json = Some(report);
@@ -124,7 +173,12 @@ pub fn save_range_report(
     None
   };
 
-  Ok((entry, print_json))
+  let outcome = SaveOutcome {
+    entry,
+    to_print: print_json,
+  };
+
+  Ok(outcome)
 }
 
 pub fn process_ranges(
@@ -143,13 +197,13 @@ pub fn process_ranges(
 
   for r in ranges.iter() {
     let out = generate_range_report(cfg, r, now_opt, base_dir_opt.as_deref())?;
-    let (entry, to_print) = save_range_report(cfg, r, out, base_dir_opt.as_deref())?;
+    let outcome = save_range_report(cfg, r, out, base_dir_opt.as_deref())?;
 
-    if let Some(e) = entry {
+    if let Some(e) = outcome.entry {
       entries.push(e);
     }
 
-    if let Some(v) = to_print {
+    if let Some(v) = outcome.to_print {
       last_single_output = Some(v);
     }
   }
@@ -229,8 +283,8 @@ mod tests {
     };
 
     let out = generate_range_report(&cfg, &range, None, None).expect("gen");
-    let (_entry, print) = save_range_report(&cfg, &range, out, None).expect("save");
-    assert!(print.is_some());
+    let outcome = save_range_report(&cfg, &range, out, None).expect("save");
+    assert!(outcome.to_print.is_some());
   }
 
   #[test]
@@ -247,9 +301,12 @@ mod tests {
       until: "2025-09-01".into(),
     };
     let out = generate_range_report(&cfg, &range, None, Some(&cfg.out)).expect("gen");
-    let (entry, print) = save_range_report(&cfg, &range, out.clone(), Some(&cfg.out)).expect("save");
-    assert!(entry.is_none(), "single split should not create manifest entry");
-    assert!(print.is_some(), "single split should return pointer to print");
+    let outcome = save_range_report(&cfg, &range, out.clone(), Some(&cfg.out)).expect("save");
+    assert!(outcome.entry.is_none(), "single split should not create manifest entry");
+    assert!(
+      outcome.to_print.is_some(),
+      "single split should return pointer to print"
+    );
     let file = out.get("file").and_then(|v| v.as_str()).unwrap();
     assert!(std::path::Path::new(&cfg.out).join(file).exists());
   }
@@ -268,9 +325,9 @@ mod tests {
       until: "2025-09-01".into(),
     };
     let out = generate_range_report(&cfg, &range, None, Some(&cfg.out)).expect("gen");
-    let (entry, print) = save_range_report(&cfg, &range, out, Some(&cfg.out)).expect("save");
-    assert!(print.is_none());
-    let e = entry.expect("entry");
+    let outcome = save_range_report(&cfg, &range, out, Some(&cfg.out)).expect("save");
+    assert!(outcome.to_print.is_none());
+    let e = outcome.entry.expect("entry");
     assert_eq!(e.file, "report-2025-08.json");
     assert!(std::path::Path::new(&cfg.out).join(&e.file).exists());
   }

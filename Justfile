@@ -20,6 +20,7 @@ _help:
   @echo "  fmt             # cargo fmt --check"
   @echo "  fmt-fix         # cargo fmt"
   @echo "  clippy          # cargo clippy -D warnings"
+  @echo "  clippy-fix      # apply cargo clippy -D warnings"
   @echo "  check-headers   # verify module headers have purpose/role"
   @echo "  audit-spacing   # spacing/layout audit (normal)"
   @echo "  audit-spacing-strict # spacing/layout audit (strict)"
@@ -64,6 +65,9 @@ fmt-fix:
 
 clippy:
   cargo clippy -- -D warnings
+
+clippy-fix:
+  cargo clippy --fix -- -D warnings
 
 # Install release binary into ~/bin
 install:
