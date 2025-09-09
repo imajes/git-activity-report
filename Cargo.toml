@@ -9,7 +9,7 @@ description = "Export Git activity to JSON (simple or sharded)"
 [dependencies]
 anyhow = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-chrono-tz = "0.8"
+chrono-tz = "0.10"
 chrono-english = "0.1"
 clap = { version = "4.5", features = ["derive"] }
 clap_mangen = "0.2"
