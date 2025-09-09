@@ -462,20 +462,14 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
   let mut out: Vec<GithubPullRequest> = Vec::with_capacity(arr.len());
 
   for pr_json in arr {
-    // Extract basic fields first
-    let number = pr_json.fetch("number").to::<i64>().unwrap_or(0);
-    let title = pr_json.fetch("title").to_or_default::<String>();
-    let state = pr_json.fetch("state").to_or_default::<String>();
-
-    let html = pr_json.fetch("html_url").to_or_default::<String>();
+    // Extract common display fields first
+    let common = build_common_pr_fields(pr_json);
     let submitter_login = pr_json.fetch("user.login").to::<String>();
-    let head = pr_json.fetch("head.ref").to::<String>();
-    let base = pr_json.fetch("base.ref").to::<String>();
 
     // Pull details and reviews for metrics & classification (best‑effort)
-    let details = api.get_pull_details_json(&owner, &name, number);
-    let reviews = api.list_reviews_for_pull_json(&owner, &name, number);
-    let commits_json = api.list_commits_in_pull_json(&owner, &name, number);
+    let details = api.get_pull_details_json(&owner, &name, common.number);
+    let reviews = api.list_reviews_for_pull_json(&owner, &name, common.number);
+    let commits_json = api.list_commits_in_pull_json(&owner, &name, common.number);
 
     // Compute metrics
     let mut review_count: Option<i64> = None;
@@ -512,15 +506,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       }
     }
 
-    // Final assembly per PR
-    let body_lines = pr_json
-      .fetch("body")
-      .to::<String>()
-      .map(|b| b.lines().map(|s| s.to_string()).collect());
-
     let (created_at, merged_at, closed_at) = resolve_timestamps(pr_json, details.as_ref());
-
-    let (diff_url, patch_url) = urls_from_html(&html);
 
     let reviewers = if reviewers_vec.is_empty() {
       None
@@ -528,25 +514,25 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       Some(reviewers_vec)
     };
 
-    let commits_vec = api.list_commits_in_pull(&owner, &name, number);
+    let commits_vec = api.list_commits_in_pull(&owner, &name, common.number);
     let commits_opt = (!commits_vec.is_empty()).then_some(commits_vec);
 
     let item = GithubPullRequest {
-      number,
-      title,
-      state,
-      body_lines,
+      number: common.number,
+      title: common.title,
+      state: common.state,
+      body_lines: common.body_lines.clone(),
       created_at,
       merged_at,
       closed_at,
-      html_url: html.clone(),
-      diff_url,
-      patch_url,
+      html_url: common.html_url.clone(),
+      diff_url: common.diff_url.clone(),
+      patch_url: common.patch_url.clone(),
       submitter,
       approver,
       reviewers,
-      head,
-      base,
+      head: common.head.clone(),
+      base: common.base.clone(),
       commits: commits_opt,
       review_count,
       approval_count,
@@ -561,6 +547,7 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
   Ok(out)
 }
 
+/// Derive diff/patch URLs from a PR `html_url`.
 fn urls_from_html(html: &str) -> (Option<String>, Option<String>) {
   if html.is_empty() {
     (None, None)
@@ -569,6 +556,67 @@ fn urls_from_html(html: &str) -> (Option<String>, Option<String>) {
   }
 }
 
+/// Common, display-oriented PR fields used across enrichment paths.
+///
+/// Field grouping follows repo conventions:
+/// - Identity/relations: `head`, `base`
+/// - Core scalars: `number`, `title`, `state`
+/// - Temporal: (resolved later by `resolve_timestamps`)
+/// - Links: `html_url`, `diff_url`, `patch_url`
+/// - Optional/derived: `body_lines`
+#[derive(Debug, Clone)]
+struct PrCommonFields {
+  /// PR number (identity)
+  number: i64,
+  /// PR title (scalar)
+  title: String,
+  /// PR state (open/closed) (scalar)
+  state: String,
+  /// Submitter message body split by lines (optional/derived)
+  body_lines: Option<Vec<String>>,
+  /// HTML URL (links)
+  html_url: String,
+  /// Diff URL derived from HTML URL (links)
+  diff_url: Option<String>,
+  /// Patch URL derived from HTML URL (links)
+  patch_url: Option<String>,
+  /// Source branch name (relation)
+  head: Option<String>,
+  /// Base branch name (relation)
+  base: Option<String>,
+}
+
+/// Extract common PR fields from the GitHub API PR JSON object.
+fn build_common_pr_fields(pr_json: &serde_json::Value) -> PrCommonFields {
+  let number = pr_json.fetch("number").to::<i64>().unwrap_or(0);
+  let title = pr_json.fetch("title").to_or_default::<String>();
+  let state = pr_json.fetch("state").to_or_default::<String>();
+
+  let html_url = pr_json.fetch("html_url").to_or_default::<String>();
+  let (diff_url, patch_url) = urls_from_html(&html_url);
+
+  let body_lines = pr_json
+    .fetch("body")
+    .to::<String>()
+    .map(|b| b.lines().map(|s| s.to_string()).collect());
+
+  let head = pr_json.fetch("head.ref").to::<String>();
+  let base = pr_json.fetch("base.ref").to::<String>();
+
+  PrCommonFields {
+    number,
+    title,
+    state,
+    body_lines,
+    html_url,
+    diff_url,
+    patch_url,
+    head,
+    base,
+  }
+}
+
+/// Aggregate review counts/approver/reviewers and compute the time to first review.
 fn process_reviews(
   api: &dyn GithubApi,
   rev_arr: &[serde_json::Value],
@@ -679,6 +727,7 @@ fn process_reviews(
   )
 }
 
+/// Resolve created/merged/closed timestamps from PR JSON with optional details override.
 fn resolve_timestamps(
   pr_json: &serde_json::Value,
   details: Option<&serde_json::Value>,
@@ -695,6 +744,7 @@ fn resolve_timestamps(
   (created_at, merged_at, closed_at)
 }
 
+/// Build a `GithubUser` for the PR submitter, attempting to classify and resolve email.
 fn build_submitter_user(
   api: &dyn GithubApi,
   login: &str,
@@ -709,19 +759,7 @@ fn build_submitter_user(
 
   let email_from_user = api.get_user_json(login).and_then(|u| u.fetch("email").to::<String>());
 
-  let email_from_commits = commits_json
-    .and_then(|c| c.as_array())
-    .and_then(|commit_items| {
-      commit_items.iter().find_map(|commit_item| {
-        let author_login = commit_item.fetch("author.login").to::<String>();
-
-        if author_login.as_deref() == Some(login) {
-          return commit_item.fetch("commit.author.email").to::<String>();
-        }
-
-        None
-      })
-    });
+  let email_from_commits = submitter_email_fallback(commits_json, login);
 
   let resolved_email = email_from_user.or(email_from_commits);
 
@@ -731,6 +769,26 @@ fn build_submitter_user(
     r#type: Some(user_type),
     email: resolved_email,
   }
+}
+
+// Extracted helper: find submitter email fallback from pull commits JSON.
+// Looks for a commit authored by `login` and returns `commit.author.email` if present.
+/// Fallback email resolution from the list of PR commits. Returns the commit author email
+/// for the entry whose `author.login` matches `login`.
+fn submitter_email_fallback(commits_json: Option<&serde_json::Value>, login: &str) -> Option<String> {
+  let arr = commits_json.and_then(|c| c.as_array())?;
+
+  let email_opt = arr.iter().find_map(|commit_item| {
+    let author_login = commit_item.fetch("author.login").to::<String>();
+
+    if author_login.as_deref() == Some(login) {
+      return commit_item.fetch("commit.author.email").to::<String>();
+    }
+
+    None
+  });
+
+  email_opt
 }
 
 fn classify_user(login: &str, assoc_opt: Option<&str>) -> String {

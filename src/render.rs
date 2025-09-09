@@ -53,6 +53,7 @@ fn author_key_for(p: &Person) -> String {
   format!("{} <{}>", p.name, p.email)
 }
 
+/// Write a single commit shard JSON under `subdir`, named with `tz`-relative timestamp and short SHA.
 fn write_commit_shard(subdir: &Path, commit: &Commit, tz: &str) -> anyhow::Result<String> {
   let fname = format_shard_name(commit.timestamps.commit, &commit.short_sha, tz);
   let shard_path = subdir.join(&fname);
@@ -65,6 +66,7 @@ fn write_commit_shard(subdir: &Path, commit: &Commit, tz: &str) -> anyhow::Resul
   Ok(fname)
 }
 
+/// Update `summary` and `files_touched` given `commit`'s file entries.
 fn accumulate_summary_and_files(commit: &Commit, summary: &mut ChangeSet, files_touched: &mut HashSet<String>) {
   let (add, del) = crate::commit::sum_additions_deletions(&commit.files);
   summary.additions += add;
@@ -298,6 +300,7 @@ fn process_commit_range(params: &ReportParams, subdir: &Path, label: &str) -> Re
 
 /// Helper for `run_full` to process unmerged branches.
 fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) -> Result<UnmergedActivity> {
+  // Collect list of branches to scan (excluding current)
   let current_branch = gitio::current_branch(&params.repo)?;
   let branches: Vec<String> = gitio::list_local_branches(&params.repo)?
     .into_iter()
@@ -319,13 +322,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
   };
 
   for branch in branches {
-    let unmerged_shas = gitio::unmerged_commits_in_range(
-      &params.repo,
-      &branch,
-      &params.since,
-      &params.until,
-      params.include_merges,
-    )?;
+    let unmerged_shas = collect_unmerged_shas(params, &branch)?;
 
     if unmerged_shas.is_empty() {
       continue;
@@ -334,29 +331,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
     let branch_dir_name = branch.replace('/', "__");
     let branch_dir = subdir.join("unmerged").join(&branch_dir_name);
 
-    let mut branch_items = Vec::with_capacity(unmerged_shas.len());
-
-    for sha in unmerged_shas.iter() {
-      let mut commit = process_commit(sha, &context)?;
-
-      if params.save_patches_dir.is_some() {
-        let patch_dir = branch_dir.join("patches");
-        crate::commit::save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
-      }
-
-      let fname = write_commit_shard(&branch_dir, &commit, &params.tz)?;
-
-      branch_items.push(ManifestItem {
-        sha: commit.sha.clone(),
-        file: Path::new(label)
-          .join("unmerged")
-          .join(&branch_dir_name)
-          .join(fname)
-          .to_string_lossy()
-          .to_string(),
-        subject: commit.subject.clone(),
-      });
-    }
+    let branch_items = write_branch_shards(&context, params, label, &branch_dir_name, &branch_dir, &unmerged_shas)?;
 
     let (behind, ahead) = gitio::branch_ahead_behind(&params.repo, &branch)?;
     unmerged_activity.total_unmerged_commits += branch_items.len();
@@ -371,6 +346,59 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
   }
 
   Ok(unmerged_activity)
+}
+
+// --- Extracted Helpers (Unmerged Branches) ---
+
+/// Collect SHAs for commits on `branch` not yet merged into `HEAD` within the configured time range.
+fn collect_unmerged_shas(params: &ReportParams, branch: &str) -> anyhow::Result<Vec<String>> {
+  let shas = gitio::unmerged_commits_in_range(
+    &params.repo,
+    branch,
+    &params.since,
+    &params.until,
+    params.include_merges,
+  )?;
+
+  Ok(shas)
+}
+
+/// Process `unmerged_shas` for a branch: build commits, optionally save patches, write shards, and return manifest items.
+fn write_branch_shards(
+  context: &ProcessContext,
+  params: &ReportParams,
+  label: &str,
+  branch_dir_name: &str,
+  branch_dir: &Path,
+  unmerged_shas: &[String],
+) -> anyhow::Result<Vec<ManifestItem>> {
+  let mut branch_items = Vec::with_capacity(unmerged_shas.len());
+
+  for sha in unmerged_shas.iter() {
+    let mut commit = process_commit(sha, context)?;
+
+    if params.save_patches_dir.is_some() {
+      let patch_dir = branch_dir.join("patches");
+      crate::commit::save_patch_to_disk(&mut commit, &params.repo, &patch_dir)?;
+    }
+
+    let fname = write_commit_shard(branch_dir, &commit, &params.tz)?;
+
+    let item = ManifestItem {
+      sha: commit.sha.clone(),
+      file: Path::new(label)
+        .join("unmerged")
+        .join(branch_dir_name)
+        .join(fname)
+        .to_string_lossy()
+        .to_string(),
+      subject: commit.subject.clone(),
+    };
+
+    branch_items.push(item);
+  }
+
+  Ok(branch_items)
 }
 
 // Shard filename helper lives in util; imported above.

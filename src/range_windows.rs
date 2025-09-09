@@ -38,6 +38,38 @@ pub struct LabeledRange {
   pub until: String,
 }
 
+// --- Normalization helpers ---
+
+/// Parse numeric strings or small spelled-out numbers into an `i32`.
+fn normalize_number_word(s: &str) -> Option<i32> {
+  if let Ok(n) = s.parse::<i32>() {
+    return Some(n);
+  }
+
+  let map = [
+    ("one", 1),
+    ("two", 2),
+    ("three", 3),
+    ("four", 4),
+    ("five", 5),
+    ("six", 6),
+    ("seven", 7),
+    ("eight", 8),
+    ("nine", 9),
+    ("ten", 10),
+    ("eleven", 11),
+    ("twelve", 12),
+  ];
+
+  for (w, n) in map {
+    if s == w {
+      return Some(n);
+    }
+  }
+
+  None
+}
+
 pub fn month_bounds(year_month: &str) -> Result<(String, String)> {
   let parts: Vec<&str> = year_month.split('-').collect();
 
@@ -255,72 +287,15 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
   let phrase = input.trim().to_lowercase();
   let now = now.unwrap_or_else(Local::now);
 
-  // Helper: parse numeric or small spelled numbers (one..twelve)
-  fn parse_count(s: &str) -> Option<i32> {
-    if let Ok(n) = s.parse::<i32>() {
-      return Some(n);
-    }
-    let map = [
-      ("one", 1),
-      ("two", 2),
-      ("three", 3),
-      ("four", 4),
-      ("five", 5),
-      ("six", 6),
-      ("seven", 7),
-      ("eight", 8),
-      ("nine", 9),
-      ("ten", 10),
-      ("eleven", 11),
-      ("twelve", 12),
-    ];
-
-    for (w, n) in map {
-      if s == w {
-        return Some(n);
-      }
-    }
-    None
-  }
-
   // (every|each) month for the last N months
   if let Some(caps) = regex::Regex::new(r"^(?:every|each)\s+month\s+for\s+the\s+last\s+([a-z0-9\-]+)\s+months?$")
     .ok()?
     .captures(&phrase)
   {
     let raw = caps.get(1).unwrap().as_str();
-    let n: i32 = parse_count(raw)?;
-    let mut out: Vec<LabeledRange> = Vec::new();
-    let mut cursor_y = now.year();
-    let mut cursor_m = now.month() as i32;
-    // Cursor is first of current month
-    for _ in 0..n {
-      // Start = first of previous month
-      let prev_m = if cursor_m == 1 { 12 } else { cursor_m - 1 };
-      let prev_y = if cursor_m == 1 { cursor_y - 1 } else { cursor_y };
+    let n: i32 = normalize_number_word(raw)?;
 
-      let start = NaiveDate::from_ymd_opt(prev_y, prev_m as u32, 1)
-        .unwrap()
-        .and_hms_opt(0, 0, 0)
-        .unwrap();
-      let end = NaiveDate::from_ymd_opt(cursor_y, cursor_m as u32, 1)
-        .unwrap()
-        .and_hms_opt(0, 0, 0)
-        .unwrap();
-
-      let label = format!("{:04}-{:02}", prev_y, prev_m);
-      let entry = LabeledRange {
-        label,
-        since: start.format("%Y-%m-%dT%H:%M:%S").to_string(),
-        until: end.format("%Y-%m-%dT%H:%M:%S").to_string(),
-      };
-
-      out.push(entry);
-
-      cursor_y = prev_y;
-      cursor_m = prev_m;
-    }
-    out.reverse();
+    let out = buckets_for_last_n_months(now, n);
 
     return Some(out);
   }
@@ -331,31 +306,81 @@ pub fn for_phrase_buckets(input: &str, now: Option<chrono::DateTime<chrono::Loca
     .captures(&phrase)
   {
     let raw = caps.get(1).unwrap().as_str();
-    let n: i32 = parse_count(raw)?;
-    let mut out: Vec<LabeledRange> = Vec::new();
-    let mut cursor = start_of_week(now);
+    let n: i32 = normalize_number_word(raw)?;
 
-    for _ in 0..n {
-      let start = cursor - chrono::Duration::days(7);
-      let end = cursor;
-      // ISO week for label
-      let iso = start.naive_local().iso_week();
-      let label = format!("{}-W{:02}", iso.year(), iso.week());
-      let entry = LabeledRange {
-        label,
-        since: start.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string(),
-        until: end.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string(),
-      };
-
-      out.push(entry);
-      cursor = start;
-    }
-    out.reverse();
+    let out = buckets_for_last_n_weeks(now, n);
 
     return Some(out);
   }
 
   None
+}
+
+// --- Bucket builders ---
+
+/// Build monthly buckets for the last `n` months (earliest → latest),
+/// using calendar month boundaries relative to `now`.
+fn buckets_for_last_n_months(now: chrono::DateTime<Local>, n: i32) -> Vec<LabeledRange> {
+  let mut out: Vec<LabeledRange> = Vec::new();
+  let mut cursor_y = now.year();
+  let mut cursor_m = now.month() as i32;
+
+  for _ in 0..n {
+    let prev_m = if cursor_m == 1 { 12 } else { cursor_m - 1 };
+    let prev_y = if cursor_m == 1 { cursor_y - 1 } else { cursor_y };
+
+    let start = NaiveDate::from_ymd_opt(prev_y, prev_m as u32, 1)
+      .unwrap()
+      .and_hms_opt(0, 0, 0)
+      .unwrap();
+    let end = NaiveDate::from_ymd_opt(cursor_y, cursor_m as u32, 1)
+      .unwrap()
+      .and_hms_opt(0, 0, 0)
+      .unwrap();
+
+    let label = format!("{:04}-{:02}", prev_y, prev_m);
+    let entry = LabeledRange {
+      label,
+      since: start.format("%Y-%m-%dT%H:%M:%S").to_string(),
+      until: end.format("%Y-%m-%dT%H:%M:%S").to_string(),
+    };
+
+    out.push(entry);
+
+    cursor_y = prev_y;
+    cursor_m = prev_m;
+  }
+
+  out.reverse();
+
+  out
+}
+
+/// Build weekly buckets for the last `n` weeks (earliest → latest),
+/// where weeks start on Monday in the local timezone.
+fn buckets_for_last_n_weeks(now: chrono::DateTime<Local>, n: i32) -> Vec<LabeledRange> {
+  let mut out: Vec<LabeledRange> = Vec::new();
+  let mut cursor = start_of_week(now);
+
+  for _ in 0..n {
+    let start = cursor - chrono::Duration::days(7);
+    let end = cursor;
+
+    let iso = start.naive_local().iso_week();
+    let label = format!("{}-W{:02}", iso.year(), iso.week());
+    let entry = LabeledRange {
+      label,
+      since: start.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string(),
+      until: end.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string(),
+    };
+
+    out.push(entry);
+    cursor = start;
+  }
+
+  out.reverse();
+
+  out
 }
 
 /// Resolve any `WindowSpec` into one or more labeled ranges.
