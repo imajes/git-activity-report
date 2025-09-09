@@ -660,6 +660,13 @@ mod tests {
   }
 
   #[test]
+  fn aggregator_no_pr_numbers_returns_empty() {
+    let commits = vec![minimal_commit_with_pr(0)]; // number==0 should be ignored
+    let out = collect_pull_requests_for_commits_with_api(&commits, ("o", "r"), ghapi::make_env_api().as_ref()).unwrap();
+    assert!(out.is_empty());
+  }
+
+  #[test]
   #[serial]
   fn seam_enrich_commit_with_env_api_sets_pr_urls() {
     let td = init_git_repo_with_origin();
@@ -816,5 +823,24 @@ mod tests {
     assert!(d.is_none() && p.is_none());
     let (d2, p2) = urls_from_html("https://github.com/openai/example/pull/1");
     assert!(d2.unwrap().ends_with(".diff") && p2.unwrap().ends_with(".patch"));
+  }
+
+  #[test]
+  fn unit_commit_patch_refs_smoke() {
+    let gh = commit_patch_refs("openai", "example", "abc");
+    assert!(gh.commit_url.unwrap().contains("/commit/abc"));
+    assert!(gh.diff_url.unwrap().ends_with(".diff"));
+    assert!(gh.patch_url.unwrap().ends_with(".patch"));
+  }
+
+  #[test]
+  fn unit_dummy_api_smoke() {
+    let api = DummyApi;
+    assert!(api.list_pulls_for_commit_json("o","r","s").is_none());
+    assert!(api.get_pull_details_json("o","r",1).is_none());
+    assert!(api.list_commits_in_pull("o","r",1).is_empty());
+    assert!(api.list_reviews_for_pull_json("o","r",1).is_none());
+    assert!(api.list_commits_in_pull_json("o","r",1).is_none());
+    assert!(api.get_user_json("nobody").is_none());
   }
 }
