@@ -106,13 +106,41 @@ If PR estimates still look low despite matched commits:
   - PRs: assembly 25, approved 15, changes 12, commented 8, files_overhead 0.7, day_drag 15, cap 0.8
 
 ## Optional: add runtime overrides (future work)
+Runtime overrides are available via environment variables (no rebuild):
 
-If you want to explore without rebuilding, we can add either:
+```
+# Commit weights
+export GAR_EST_BASE_COMMIT_MIN=10
+export GAR_EST_PER_FILE_MIN=1.25
+export GAR_EST_PER_FILE_TAIL_MIN=0.4
+export GAR_EST_SQRT_LINES_COEFF=1.2
+export GAR_EST_RENAME_DISCOUNT=0.9
+export GAR_EST_HEAVY_DELETE_DISCOUNT=0.95
+export GAR_EST_TEST_ONLY_DISCOUNT=1.0
+export GAR_EST_MIXED_TESTS_UPLIFT=1.15
+export GAR_EST_COG_BASE_MIN=12
+export GAR_EST_COG_EXT_MIX_COEFF=0.4
+export GAR_EST_COG_DIR_MIX_COEFF=0.4
+export GAR_EST_COG_BALANCED_EDIT_COEFF=0.1
+export GAR_EST_COG_LANG_COMPLEXITY_COEFF=0.1
 
-- CLI flags for weights (hidden or advanced), or
-- Environment overrides (e.g., `GAR_EST_BASE_COMMIT_MIN=10`).
+# PR overheads
+export GAR_EST_PR_REVIEW_APPROVED_MIN=12
+export GAR_EST_PR_REVIEW_CHANGES_MIN=10
+export GAR_EST_PR_REVIEW_COMMENTED_MIN=6
+export GAR_EST_PR_FILES_OVERHEAD_PER_REVIEW_MIN=0.5
+export GAR_EST_PR_DAY_DRAG_MIN=12
+export GAR_EST_PR_ASSEMBLY_MIN=18
+export GAR_EST_PR_APPROVER_ONLY_MIN=12
+export GAR_EST_PR_CYCLE_TIME_CAP_RATIO=0.7
+```
 
-This keeps JSON contracts stable (estimates remain optional fields) and makes calibration easier across repos. If you want, I can wire a minimal env‑override seam behind a feature flag in a follow‑up PR.
+Unset to return to defaults:
+
+```
+env -u GAR_EST_BASE_COMMIT_MIN -u GAR_EST_PER_FILE_MIN \
+  -u GAR_EST_PR_ASSEMBLY_MIN -- cargo run -- …
+```
 
 ## Tips & gotchas
 
