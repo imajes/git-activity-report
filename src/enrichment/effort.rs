@@ -94,6 +94,48 @@ impl Default for EffortWeights {
   }
 }
 
+fn env_f(name: &str, default: f64) -> f64 {
+  match std::env::var(name) {
+    Ok(s) => s.parse::<f64>().unwrap_or(default),
+    Err(_) => default,
+  }
+}
+
+fn weights_from_env() -> EffortWeights {
+  let d = EffortWeights::default();
+
+  let base_commit_min = env_f("GAR_EST_BASE_COMMIT_MIN", d.base_commit_min);
+  let per_file_min = env_f("GAR_EST_PER_FILE_MIN", d.per_file_min);
+  let per_file_tail_min = env_f("GAR_EST_PER_FILE_TAIL_MIN", d.per_file_tail_min);
+  let sqrt_lines_coeff = env_f("GAR_EST_SQRT_LINES_COEFF", d.sqrt_lines_coeff);
+  let rename_discount = env_f("GAR_EST_RENAME_DISCOUNT", d.rename_discount);
+  let heavy_delete_discount = env_f("GAR_EST_HEAVY_DELETE_DISCOUNT", d.heavy_delete_discount);
+  let test_only_discount = env_f("GAR_EST_TEST_ONLY_DISCOUNT", d.test_only_discount);
+  let mixed_tests_uplift = env_f("GAR_EST_MIXED_TESTS_UPLIFT", d.mixed_tests_uplift);
+
+  let cognitive_base_min = env_f("GAR_EST_COG_BASE_MIN", d.cognitive_base_min);
+  let cog_ext_mix_coeff = env_f("GAR_EST_COG_EXT_MIX_COEFF", d.cog_ext_mix_coeff);
+  let cog_dir_mix_coeff = env_f("GAR_EST_COG_DIR_MIX_COEFF", d.cog_dir_mix_coeff);
+  let cog_balanced_edit_coeff = env_f("GAR_EST_COG_BALANCED_EDIT_COEFF", d.cog_balanced_edit_coeff);
+  let cog_lang_complexity_coeff = env_f("GAR_EST_COG_LANG_COMPLEXITY_COEFF", d.cog_lang_complexity_coeff);
+
+  EffortWeights {
+    base_commit_min,
+    per_file_min,
+    per_file_tail_min,
+    sqrt_lines_coeff,
+    rename_discount,
+    heavy_delete_discount,
+    test_only_discount,
+    mixed_tests_uplift,
+    cognitive_base_min,
+    cog_ext_mix_coeff,
+    cog_dir_mix_coeff,
+    cog_balanced_edit_coeff,
+    cog_lang_complexity_coeff,
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PrEstimateParams {
   pub review_approved_min: f64,
@@ -118,6 +160,33 @@ impl Default for PrEstimateParams {
       approver_only_min: tuning::PR_APPROVER_ONLY_MIN,
       cycle_time_cap_ratio: tuning::PR_CYCLE_TIME_CAP_RATIO,
     }
+  }
+}
+
+fn pr_params_from_env() -> PrEstimateParams {
+  let d = PrEstimateParams::default();
+
+  let review_approved_min = env_f("GAR_EST_PR_REVIEW_APPROVED_MIN", d.review_approved_min);
+  let review_changes_min = env_f("GAR_EST_PR_REVIEW_CHANGES_MIN", d.review_changes_min);
+  let review_commented_min = env_f("GAR_EST_PR_REVIEW_COMMENTED_MIN", d.review_commented_min);
+  let files_overhead_per_review_min = env_f(
+    "GAR_EST_PR_FILES_OVERHEAD_PER_REVIEW_MIN",
+    d.files_overhead_per_review_min,
+  );
+  let day_drag_min = env_f("GAR_EST_PR_DAY_DRAG_MIN", d.day_drag_min);
+  let pr_assembly_min = env_f("GAR_EST_PR_ASSEMBLY_MIN", d.pr_assembly_min);
+  let approver_only_min = env_f("GAR_EST_PR_APPROVER_ONLY_MIN", d.approver_only_min);
+  let cycle_time_cap_ratio = env_f("GAR_EST_PR_CYCLE_TIME_CAP_RATIO", d.cycle_time_cap_ratio);
+
+  PrEstimateParams {
+    review_approved_min,
+    review_changes_min,
+    review_commented_min,
+    files_overhead_per_review_min,
+    day_drag_min,
+    pr_assembly_min,
+    approver_only_min,
+    cycle_time_cap_ratio,
   }
 }
 
@@ -164,7 +233,8 @@ fn top_level_dir(path: &str) -> Option<&str> {
 
 /// Estimate effort for a single commit using file stats and light heuristics.
 pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
-  let weights = EffortWeights::default();
+  // Build weights with optional env overrides
+  let weights = weights_from_env();
 
   // Phase 1: trivial guards
   if commit.parents.len() > 1 {
@@ -318,8 +388,8 @@ fn derive_review_counts(pr: &GithubPullRequest) -> (i64, i64, i64) {
 
 /// Estimate effort for a single PR using commit estimates and review metadata.
 pub fn estimate_pr_effort(pr: &GithubPullRequest, range_commits: &[Commit]) -> EffortEstimate {
-  let _weights = EffortWeights::default();
-  let params = PrEstimateParams::default();
+  // Use env-tuned params; commit estimator already reads env
+  let params = pr_params_from_env();
 
   // Phase 1: collect commit estimates by matching sha
   let mut subtotal = 0.0f64;
