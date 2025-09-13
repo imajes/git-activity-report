@@ -32,6 +32,12 @@ pub struct EffortWeights {
   pub heavy_delete_discount: f64,
   pub test_only_discount: f64,
   pub mixed_tests_uplift: f64,
+  // Cognitive overhead (per-commit) — additive minutes scaled by breadth/complexity
+  pub cognitive_base_min: f64,
+  pub cog_ext_mix_coeff: f64,     // weight for extension diversity
+  pub cog_dir_mix_coeff: f64,     // weight for top-level directory diversity
+  pub cog_balanced_edit_coeff: f64, // weight for adds:del balance (peak near 50/50)
+  pub cog_lang_complexity_coeff: f64, // weight for average language complexity
 }
 
 impl Default for EffortWeights {
@@ -45,6 +51,11 @@ impl Default for EffortWeights {
       heavy_delete_discount: 0.8,
       test_only_discount: 0.9,
       mixed_tests_uplift: 1.05,
+      cognitive_base_min: 8.0,
+      cog_ext_mix_coeff: 0.35,
+      cog_dir_mix_coeff: 0.35,
+      cog_balanced_edit_coeff: 0.15,
+      cog_lang_complexity_coeff: 0.15,
     }
   }
 }
@@ -105,6 +116,16 @@ fn is_test_path(path: &str) -> bool {
 /// Clamp a value to [min, max].
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
   v.max(lo).min(hi)
+}
+
+fn top_level_dir(path: &str) -> Option<&str> {
+  let mut parts = path.split('/');
+  let first = parts.next()?;
+  if first.is_empty() || !path.contains('/') {
+    None
+  } else {
+    Some(first)
+  }
 }
 
 /// Estimate effort for a single commit using file stats and light heuristics.
@@ -184,6 +205,43 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
   } else if tests_ratio > 0.0 {
     minutes *= weights.mixed_tests_uplift;
   }
+
+  // Phase 3b: cognitive overhead — additive minutes scaled by breadth and complexity signals
+  use std::collections::BTreeSet;
+  let mut ext_set: BTreeSet<String> = BTreeSet::new();
+  let mut dir_set: BTreeSet<String> = BTreeSet::new();
+
+  for f in &commit.files {
+    let ext = f.file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    if !ext.is_empty() {
+      ext_set.insert(ext);
+    }
+
+    if let Some(dir) = top_level_dir(&f.file) {
+      dir_set.insert(dir.to_string());
+    }
+  }
+
+  let ext_mix = ((ext_set.len().min(4)) as f64) / 4.0; // 0..1
+  let dir_mix = ((dir_set.len().min(4)) as f64) / 4.0; // 0..1
+  let balanced_edit = if total_lines > 0.0 {
+    let add_ratio = (total_add as f64 / total_lines).clamp(0.0, 1.0);
+    // Peak at 0.5, 0 at 0 or 1
+    1.0 - ((add_ratio - 0.5).abs() * 2.0)
+  } else {
+    0.0
+  };
+  // Normalize avg_lang_weight (1.0..1.25) to ~0..1 range
+  let lang_complexity = ((avg_lang_weight - 1.0) / 0.25).clamp(0.0, 1.0);
+
+  let cognitive_index =
+    weights.cog_ext_mix_coeff * ext_mix +
+    weights.cog_dir_mix_coeff * dir_mix +
+    weights.cog_balanced_edit_coeff * balanced_edit +
+    weights.cog_lang_complexity_coeff * lang_complexity;
+
+  let cognitive_minutes = weights.cognitive_base_min * cognitive_index;
+  minutes += cognitive_minutes;
 
   // Phase 4: finalize
   let minutes = clamp(minutes, 1.0, 240.0);
