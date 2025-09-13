@@ -73,6 +73,36 @@ git activity-report --split-apart --for "last month" \
   --save-patches out/last-month/patches
 ```
 
+## Reading Estimates (optional)
+
+When you pass `--estimate-effort` (or `--detailed`), the tool attaches transparent time estimates (in minutes) to commits and PRs.
+
+- Commit fields (optional):
+  - `estimated_minutes`, `estimated_minutes_min`, `estimated_minutes_max`
+  - `estimate_confidence` (0–1) and `estimate_basis` (short explanation: files/lines/lang/tests/renames)
+
+- PR fields (optional; require `--github-prs`):
+  - Same five fields on each `github.pull_requests[]` entry. Basis summarizes matched commits + review overheads.
+
+Examples:
+
+```bash
+# Commit-level estimates for the first commit
+git activity-report --for "last week" --repo . --estimate-effort \
+  | jq '.commits[0] | {estimated_minutes,estimated_minutes_min,estimated_minutes_max,estimate_confidence,estimate_basis}'
+
+# PR-level estimates (requires GitHub auth or GITHUB_TOKEN)
+git activity-report --for "last week" --repo . --github-prs --estimate-effort \
+  | jq '.commits[] | select(.github!=null) | .github.pull_requests[] \
+        | {number,title,estimated_minutes,estimate_basis}'
+```
+
+Notes:
+
+- Units are minutes; downstream tools can format hours if desired.
+- Merge commits estimate to 0 minutes; effort is attributed to the PR and constituent commits.
+- Confidence is indicative only; the basis string explains the drivers.
+
 ## CLI reference (high‑use flags)
 
 - Time range (pick one):
