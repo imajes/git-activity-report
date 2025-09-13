@@ -76,6 +76,17 @@ pub struct Commit {
   pub patch_lines: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub body_lines: Option<Vec<String>>,
+  // Optional effort estimation (best-effort, minutes)
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_min: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_max: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_confidence: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_basis: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub github: Option<CommitGithub>,
 }
@@ -176,6 +187,17 @@ pub struct GithubPullRequest {
   pub time_to_first_review_seconds: Option<i64>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub time_to_merge_seconds: Option<i64>,
+  // Optional effort estimation (best-effort, minutes)
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_min: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimated_minutes_max: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_confidence: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub estimate_basis: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

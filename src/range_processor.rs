@@ -259,6 +259,7 @@ mod tests {
       include_unmerged: false,
       tz: "utc".into(),
       now_override: None,
+      estimate_effort: false,
     }
   }
 

@@ -57,6 +57,10 @@ pub struct Cli {
   #[arg(long)]
   pub detailed: bool,
 
+  /// Compute effort estimates for commits and PRs (opt-in)
+  #[arg(long)]
+  pub estimate_effort: bool,
+
   /// Include merge commits
   #[arg(long)]
   pub include_merges: bool,
@@ -116,6 +120,7 @@ pub struct EffectiveConfig {
   pub include_unmerged: bool,
   pub tz: String,
   pub now_override: Option<String>,
+  pub estimate_effort: bool,
 }
 
 pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
@@ -140,6 +145,7 @@ pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
   let include_unmerged = cli.include_unmerged || cli.detailed;
   let include_patch = cli.include_patch || cli.detailed;
   let github_prs = cli.github_prs || cli.detailed;
+  let estimate_effort = cli.estimate_effort || cli.detailed;
 
   let repo = util::canonicalize_lossy(&cli.repo);
 
@@ -157,6 +163,7 @@ pub fn normalize(cli: Cli) -> Result<EffectiveConfig> {
     include_unmerged,
     tz: cli.tz.clone(),
     now_override: cli.now_override.clone(),
+    estimate_effort,
   })
 }
 
@@ -174,6 +181,7 @@ mod tests {
       until: None,
       split_apart: false,
       detailed: false,
+      estimate_effort: false,
       include_merges: false,
       include_patch: false,
       max_patch_bytes: 0,
@@ -208,5 +216,6 @@ mod tests {
     assert!(cfg.include_unmerged);
     assert!(cfg.include_patch);
     assert!(cfg.github_prs);
+    assert!(cfg.estimate_effort);
   }
 }

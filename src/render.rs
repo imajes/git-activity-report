@@ -37,6 +37,7 @@ fn build_process_context<'a>(params: &'a ReportParams) -> ProcessContext<'a> {
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
   }
 }
 
@@ -96,6 +97,7 @@ pub struct ReportParams {
   pub save_patches_dir: Option<String>,
   pub github_prs: bool,
   pub now_local: Option<DateTime<Local>>,
+  pub estimate_effort: bool,
 }
 
 /// Build `ReportParams` from an `EffectiveConfig` and an explicit `[since, until]` window.
@@ -120,6 +122,7 @@ pub fn build_report_params(cfg: &crate::cli::EffectiveConfig, since: String, unt
     save_patches_dir: cfg.save_patches.clone(),
     github_prs: cfg.github_prs,
     now_local: None,
+    estimate_effort: cfg.estimate_effort,
   }
 }
 
@@ -164,6 +167,11 @@ pub fn run_simple(params: &ReportParams) -> Result<SimpleReport> {
     }
 
     commits.push(commit);
+  }
+
+  // Optional: attach PR estimates using the full commit range context
+  if params.github_prs && params.estimate_effort {
+    attach_pr_estimates(&mut commits);
   }
 
   changeset.files_touched = files_touched.len();
@@ -293,9 +301,33 @@ fn process_commit_range(params: &ReportParams, subdir: &Path, label: &str) -> Re
     commits.push(commit);
   }
 
+  // Optional: attach PR estimates using the full commit range context
+  if params.github_prs && params.estimate_effort {
+    attach_pr_estimates(&mut commits);
+  }
+
   summary.files_touched = files_touched.len();
 
   Ok((commits, items, summary, authors))
+}
+
+/// Compute and attach PR-level effort estimates to each commit's PRs using the full range context.
+fn attach_pr_estimates(commits: &mut [Commit]) {
+  // Keep a snapshot of commits for estimation context
+  let snapshot: Vec<Commit> = commits.to_vec();
+
+  for c in commits.iter_mut() {
+    if let Some(gh) = c.github.as_mut() {
+      for pr in gh.pull_requests.iter_mut() {
+        let est = crate::enrichment::effort::estimate_pr_effort(pr, &snapshot);
+        pr.estimated_minutes = Some(est.minutes);
+        pr.estimated_minutes_min = Some(est.min_minutes);
+        pr.estimated_minutes_max = Some(est.max_minutes);
+        pr.estimate_confidence = Some(est.confidence as f64);
+        pr.estimate_basis = Some(est.basis);
+      }
+    }
+  }
 }
 
 /// Helper for `run_full` to process unmerged branches.
@@ -313,6 +345,7 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
     github_prs: params.github_prs,
     include_patch: params.include_patch,
     max_patch_bytes: params.max_patch_bytes,
+    estimate_effort: params.estimate_effort,
   };
 
   let mut unmerged_activity = UnmergedActivity {
@@ -453,6 +486,7 @@ mod tests {
       save_patches_dir: Some(tmpdir.path().to_string_lossy().to_string()),
       github_prs: true,
       now_local: None,
+      estimate_effort: false,
     };
     let report = run_simple(&params).unwrap();
     assert!(report.summary.count >= 1);
@@ -480,6 +514,7 @@ mod tests {
       save_patches_dir: None,
       github_prs: false,
       now_local: None,
+      estimate_effort: false,
     };
     let report = run_simple(&params).unwrap();
     assert!(report.summary.count >= 1);
@@ -505,6 +540,7 @@ mod tests {
       save_patches_dir: Some(tmpdir.path().join("patches").to_string_lossy().to_string()),
       github_prs: false,
       now_local: None,
+      estimate_effort: false,
     };
     let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -532,6 +568,7 @@ mod tests {
       save_patches_dir: None,
       github_prs: true,
       now_local: None,
+      estimate_effort: false,
     };
     let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -559,6 +596,7 @@ mod tests {
       save_patches_dir: None,
       github_prs: false,
       now_local: None,
+      estimate_effort: false,
     };
     let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();
@@ -608,6 +646,7 @@ mod tests {
       save_patches_dir: None,
       github_prs: false,
       now_local: None,
+      estimate_effort: false,
     };
     let out = run_report(&params).unwrap();
     let dir = out.get("dir").unwrap().as_str().unwrap();

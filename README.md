@@ -12,6 +12,7 @@ Export Git activity into structured JSON — either a single report or a split�
   - Split‑apart (`--split-apart`): per‑commit shard files plus a per‑range report (`report-<label>.json` with `items[]`), and an overall `manifest.json` for multi‑range runs.
 
 - **Optional GitHub PR enrichment**: attaches PR metadata and `.diff`/`.patch` links when available (quietly skipped if unauthenticated).
+- **Optional effort estimation**: with `--estimate-effort` (or `--detailed`), attaches transparent time estimates (minutes) to commits and PRs.
 - **Optional unmerged branch scan**: include commits in the window that are **not** reachable from `HEAD` (in‑flight work), grouped by local branch.
 - **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
   Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
@@ -72,6 +73,36 @@ git activity-report --split-apart --for "last month" \
   --save-patches out/last-month/patches
 ```
 
+## Reading Estimates (optional)
+
+When you pass `--estimate-effort` (or `--detailed`), the tool attaches transparent time estimates (in minutes) to commits and PRs.
+
+- Commit fields (optional):
+  - `estimated_minutes`, `estimated_minutes_min`, `estimated_minutes_max`
+  - `estimate_confidence` (0–1) and `estimate_basis` (short explanation: files/lines/lang/tests/renames)
+
+- PR fields (optional; require `--github-prs`):
+  - Same five fields on each `github.pull_requests[]` entry. Basis summarizes matched commits + review overheads.
+
+Examples:
+
+```bash
+# Commit-level estimates for the first commit
+git activity-report --for "last week" --repo . --estimate-effort \
+  | jq '.commits[0] | {estimated_minutes,estimated_minutes_min,estimated_minutes_max,estimate_confidence,estimate_basis}'
+
+# PR-level estimates (requires GitHub auth or GITHUB_TOKEN)
+git activity-report --for "last week" --repo . --github-prs --estimate-effort \
+  | jq '.commits[] | select(.github!=null) | .github.pull_requests[] \
+        | {number,title,estimated_minutes,estimate_basis}'
+```
+
+Notes:
+
+- Units are minutes; downstream tools can format hours if desired.
+- Merge commits estimate to 0 minutes; effort is attributed to the PR and constituent commits.
+- Confidence is indicative only; the basis string explains the drivers.
+
 ## CLI reference (high‑use flags)
 
 - Time range (pick one):
@@ -93,6 +124,7 @@ git activity-report --split-apart --for "last month" \
   - `--out`: for single report, a file path (default stdout "-"); for split‑apart or multi‑range, a base directory (default: auto‑named temp dir)
 
 - Integrations: `--github-prs`
+- Effort: `--estimate-effort` (adds `estimated_minutes*` fields to commits/PRs)
 - Unmerged work: `--include-unmerged`
 - Timezone label: `--tz local|utc` (default `local`)
 

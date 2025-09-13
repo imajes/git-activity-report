@@ -69,6 +69,11 @@ mod tests {
       patch_clipped: None,
       patch_lines: None,
       body_lines: None,
+      estimated_minutes: None,
+      estimated_minutes_min: None,
+      estimated_minutes_max: None,
+      estimate_confidence: None,
+      estimate_basis: None,
       github: None,
     }
   }
