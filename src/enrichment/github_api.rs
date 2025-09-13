@@ -539,6 +539,11 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
       change_request_count,
       time_to_first_review_seconds,
       time_to_merge_seconds,
+      estimated_minutes: None,
+      estimated_minutes_min: None,
+      estimated_minutes_max: None,
+      estimate_confidence: None,
+      estimate_basis: None,
     };
     out.push(item);
   }

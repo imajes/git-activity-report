@@ -12,6 +12,7 @@ Export Git activity into structured JSON — either a single report or a split�
   - Split‑apart (`--split-apart`): per‑commit shard files plus a per‑range report (`report-<label>.json` with `items[]`), and an overall `manifest.json` for multi‑range runs.
 
 - **Optional GitHub PR enrichment**: attaches PR metadata and `.diff`/`.patch` links when available (quietly skipped if unauthenticated).
+- **Optional effort estimation**: with `--estimate-effort` (or `--detailed`), attaches transparent time estimates (minutes) to commits and PRs.
 - **Optional unmerged branch scan**: include commits in the window that are **not** reachable from `HEAD` (in‑flight work), grouped by local branch.
 - **Patches**: embed in JSON (`--include-patch`, optional `--max-patch-bytes`), and/or write `.patch` files to disk (`--save-patches`).
   Prototype: a Python script still lives under `prototype/` for reference, but the Rust binary is the primary implementation.
@@ -93,6 +94,7 @@ git activity-report --split-apart --for "last month" \
   - `--out`: for single report, a file path (default stdout "-"); for split‑apart or multi‑range, a base directory (default: auto‑named temp dir)
 
 - Integrations: `--github-prs`
+- Effort: `--estimate-effort` (adds `estimated_minutes*` fields to commits/PRs)
 - Unmerged work: `--include-unmerged`
 - Timezone label: `--tz local|utc` (default `local`)
 

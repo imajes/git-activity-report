@@ -7,5 +7,6 @@
 // tie_breakers: contracts > orchestration > correctness > performance > minimal_diffs
 // === Module Header END ===
 
+pub mod effort;
 pub mod github_api;
 pub mod github_pull_requests;
