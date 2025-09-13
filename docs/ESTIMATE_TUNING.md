@@ -21,7 +21,13 @@ Two sets of weights drive estimates (see `src/enrichment/effort.rs`).
   - `day_drag_min` (7.0 per extra day the PR spans across its commits)
   - `cycle_time_cap_ratio` (0.5; cap = 50% of wall‑clock `created_at → merged_at`)
 
-Currently, these weights are compiled constants; CLI flags for them are intentionally not exposed to keep the main surface small. The simple workflow below lets you iterate quickly and safely.
+Currently, the defaults live in one place for easy tuning (no magic numbers):
+
+- src/enrichment/effort.rs
+  - EffortWeights::default and PrEstimateParams::default (semantic multipliers/overheads)
+  - tuning::* constants (thresholds, banding, and PR defaults)
+
+CLI flags are intentionally not exposed yet to keep the surface small; use the single edit points above.
 
 ## Workflow: measure → tweak → compare
 
@@ -51,7 +57,7 @@ jq '[.commits[] | select(.github!=null) | .github.pull_requests[] | .estimated_m
 jq -r '.commits[] | select(.github!=null) | .github.pull_requests[]   | select(.time_to_merge_seconds!=null)   | {n: .number, minutes: .estimated_minutes, wall_mins: (.time_to_merge_seconds/60)}' out-pr-baseline.json
 ```
 
-3) Tweak weights (local patch) and rebuild
+3) Tweak weights & constants (local patch) and rebuild
 
 Edit `src/enrichment/effort.rs` to change the defaults under `EffortWeights` and `PrEstimateParams` (both have `impl Default` blocks). Rebuild and re-run the same windows.
 
@@ -65,11 +71,11 @@ Common adjustments when estimates feel low (optimistic):
   - Reduce test discount: `test_only_discount` 0.9 → 1.0; raise `mixed_tests_uplift` 1.05 → 1.15.
 
 - PR‑level
-  - Increase `pr_assembly_min` from 10 → 15–20.
-  - Increase review minutes: APPROVED 9 → 12, CHANGES_REQUESTED 6 → 10, COMMENTED 4 → 6.
-  - Increase `files_overhead_per_review_min` 0.2 → 0.4–0.6.
-  - Increase `day_drag_min` 7 → 10–12.
-  - If estimates get clipped too low by wall‑time bounds, increase `cycle_time_cap_ratio` 0.5 → 0.7.
+  - Increase `pr_assembly_min` (tuning::PR_ASSEMBLY_MIN) from 10 → 15–20.
+  - Increase review minutes: APPROVED (tuning::PR_REVIEW_APPROVED_MIN) 9 → 12, CHANGES 6 → 10, COMMENTED 4 → 6.
+  - Increase `files_overhead_per_review_min` (tuning::PR_FILES_OVERHEAD_PER_REVIEW_MIN) 0.2 → 0.4–0.6.
+  - Increase `day_drag_min` (tuning::PR_DAY_DRAG_MIN) 7 → 10–12.
+  - If estimates get clipped too low by wall‑time bounds, increase `cycle_time_cap_ratio` (tuning::PR_CYCLE_TIME_CAP_RATIO) 0.5 → 0.7.
 
 Rebuild and compare with your baseline outputs.
 
@@ -89,7 +95,7 @@ If PR estimates still look low despite matched commits:
 - Raise `pr_assembly_min`, review minutes, and `day_drag_min` as needed.
 - Consider increasing `cycle_time_cap_ratio` if your organization’s “active time” tends to be a larger fraction of wall time.
 
-## Presets to try
+## Presets to try (edit EffortWeights::default / PrEstimateParams::default)
 
 - “Moderate” (more realistic for many teams)
   - Commits: base 10.0, per_file 1.25, tail 0.4, sqrt_coeff 1.2, rename 0.9, del 0.95, test_only 1.0, mixed 1.15
