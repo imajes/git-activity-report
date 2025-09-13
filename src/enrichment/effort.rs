@@ -11,6 +11,24 @@
 
 use crate::model::{Commit, GithubPullRequest};
 
+// --- Estimation Tuning Constants (single edit point; avoid magic numbers) ---
+pub mod tuning {
+  pub const MIN_MINUTES: f64 = 1.0;
+  pub const MAX_MINUTES: f64 = 240.0;
+  pub const BAND_MIN_RATIO: f64 = 0.8;
+  pub const BAND_MAX_RATIO: f64 = 1.25;
+
+  pub const RENAME_RATIO_DISCOUNT_THRESHOLD: f64 = 0.5;
+  pub const HEAVY_DELETE_RATIO_THRESHOLD: f64 = 0.7;
+  pub const TESTS_MOSTLY_THRESHOLD: f64 = 0.8;
+
+  pub const COG_MAX_MIX_BUCKETS: usize = 4;
+  pub const BALANCE_CENTER: f64 = 0.5;
+  pub const BALANCE_SHAPE: f64 = 2.0;
+  pub const LANG_COMPLEXITY_BASE: f64 = 1.0;
+  pub const LANG_COMPLEXITY_SPAN: f64 = 0.25;
+}
+
 /// A lightweight, explainable estimate of time spent (in minutes).
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffortEstimate {
@@ -193,14 +211,14 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
   minutes += total_lines.sqrt() * weights.sqrt_lines_coeff;
   minutes *= avg_lang_weight;
 
-  if rename_ratio > 0.5 {
+  if rename_ratio > tuning::RENAME_RATIO_DISCOUNT_THRESHOLD {
     minutes *= weights.rename_discount;
   }
-  if deletions_ratio > 0.7 {
+  if deletions_ratio > tuning::HEAVY_DELETE_RATIO_THRESHOLD {
     minutes *= weights.heavy_delete_discount;
   }
 
-  if tests_ratio >= 0.8 {
+  if tests_ratio >= tuning::TESTS_MOSTLY_THRESHOLD {
     minutes *= weights.test_only_discount;
   } else if tests_ratio > 0.0 {
     minutes *= weights.mixed_tests_uplift;
@@ -222,17 +240,20 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
     }
   }
 
-  let ext_mix = ((ext_set.len().min(4)) as f64) / 4.0; // 0..1
-  let dir_mix = ((dir_set.len().min(4)) as f64) / 4.0; // 0..1
+  let ext_mix = (ext_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64)
+    / (tuning::COG_MAX_MIX_BUCKETS as f64);
+  let dir_mix = (dir_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64)
+    / (tuning::COG_MAX_MIX_BUCKETS as f64);
   let balanced_edit = if total_lines > 0.0 {
     let add_ratio = (total_add as f64 / total_lines).clamp(0.0, 1.0);
-    // Peak at 0.5, 0 at 0 or 1
-    1.0 - ((add_ratio - 0.5).abs() * 2.0)
+    1.0 - ((add_ratio - tuning::BALANCE_CENTER).abs() * tuning::BALANCE_SHAPE)
   } else {
     0.0
   };
   // Normalize avg_lang_weight (1.0..1.25) to ~0..1 range
-  let lang_complexity = ((avg_lang_weight - 1.0) / 0.25).clamp(0.0, 1.0);
+  let lang_complexity = ((avg_lang_weight - tuning::LANG_COMPLEXITY_BASE)
+    / tuning::LANG_COMPLEXITY_SPAN)
+    .clamp(0.0, 1.0);
 
   let cognitive_index =
     weights.cog_ext_mix_coeff * ext_mix +
@@ -244,9 +265,17 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
   minutes += cognitive_minutes;
 
   // Phase 4: finalize
-  let minutes = clamp(minutes, 1.0, 240.0);
-  let min_minutes = clamp(minutes * 0.8, 0.5, 240.0);
-  let max_minutes = clamp(minutes * 1.25, 1.0, 360.0);
+  let minutes = clamp(minutes, tuning::MIN_MINUTES, tuning::MAX_MINUTES);
+  let min_minutes = clamp(
+    minutes * tuning::BAND_MIN_RATIO,
+    tuning::MIN_MINUTES * 0.5,
+    tuning::MAX_MINUTES,
+  );
+  let max_minutes = clamp(
+    minutes * tuning::BAND_MAX_RATIO,
+    tuning::MIN_MINUTES,
+    tuning::MAX_MINUTES * 1.5,
+  );
 
   let basis = format!(
     "files={} lines={} lang_w={:.2} tests={:.0}% renames={:.0}%",
