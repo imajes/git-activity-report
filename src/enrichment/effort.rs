@@ -27,6 +27,12 @@ pub mod tuning {
   pub const BALANCE_SHAPE: f64 = 2.0;
   pub const LANG_COMPLEXITY_BASE: f64 = 1.0;
   pub const LANG_COMPLEXITY_SPAN: f64 = 0.25;
+
+  // PR estimate banding (final min/max envelope)
+  pub const PR_MIN_MINUTES: f64 = 1.0;
+  pub const PR_MAX_MINUTES: f64 = 10000.0;
+  pub const PR_BAND_MIN_RATIO: f64 = 0.85; // min = minutes * 0.85
+  pub const PR_BAND_MAX_RATIO: f64 = 1.20; // max = minutes * 1.20
 }
 
 /// A lightweight, explainable estimate of time spent (in minutes).
@@ -371,8 +377,16 @@ pub fn estimate_pr_effort(pr: &GithubPullRequest, range_commits: &[Commit]) -> E
   }
 
   let confidence = if matched > 0 { 0.65 } else { 0.45 };
-  let min_minutes = clamp(minutes * 0.85, 1.0, 10000.0);
-  let max_minutes = clamp(minutes * 1.2, 1.0, 10000.0);
+  let min_minutes = clamp(
+    minutes * tuning::PR_BAND_MIN_RATIO,
+    tuning::PR_MIN_MINUTES,
+    tuning::PR_MAX_MINUTES,
+  );
+  let max_minutes = clamp(
+    minutes * tuning::PR_BAND_MAX_RATIO,
+    tuning::PR_MIN_MINUTES,
+    tuning::PR_MAX_MINUTES,
+  );
 
   let basis = format!(
     "commits_matched={} subtotal={:.1} overhead={:.1}",
