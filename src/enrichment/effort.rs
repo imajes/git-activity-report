@@ -33,6 +33,16 @@ pub mod tuning {
   pub const PR_MAX_MINUTES: f64 = 10000.0;
   pub const PR_BAND_MIN_RATIO: f64 = 0.85; // min = minutes * 0.85
   pub const PR_BAND_MAX_RATIO: f64 = 1.20; // max = minutes * 1.20
+
+  // PR overhead defaults (used by PrEstimateParams::default)
+  pub const PR_REVIEW_APPROVED_MIN: f64 = 9.0;
+  pub const PR_REVIEW_CHANGES_MIN: f64 = 6.0;
+  pub const PR_REVIEW_COMMENTED_MIN: f64 = 4.0;
+  pub const PR_FILES_OVERHEAD_PER_REVIEW_MIN: f64 = 0.2;
+  pub const PR_DAY_DRAG_MIN: f64 = 7.0;
+  pub const PR_ASSEMBLY_MIN: f64 = 10.0;
+  pub const PR_APPROVER_ONLY_MIN: f64 = 10.0;
+  pub const PR_CYCLE_TIME_CAP_RATIO: f64 = 0.5;
 }
 
 /// A lightweight, explainable estimate of time spent (in minutes).
@@ -58,9 +68,9 @@ pub struct EffortWeights {
   pub mixed_tests_uplift: f64,
   // Cognitive overhead (per-commit) — additive minutes scaled by breadth/complexity
   pub cognitive_base_min: f64,
-  pub cog_ext_mix_coeff: f64,     // weight for extension diversity
-  pub cog_dir_mix_coeff: f64,     // weight for top-level directory diversity
-  pub cog_balanced_edit_coeff: f64, // weight for adds:del balance (peak near 50/50)
+  pub cog_ext_mix_coeff: f64,         // weight for extension diversity
+  pub cog_dir_mix_coeff: f64,         // weight for top-level directory diversity
+  pub cog_balanced_edit_coeff: f64,   // weight for adds:del balance (peak near 50/50)
   pub cog_lang_complexity_coeff: f64, // weight for average language complexity
 }
 
@@ -99,14 +109,14 @@ pub struct PrEstimateParams {
 impl Default for PrEstimateParams {
   fn default() -> Self {
     Self {
-      review_approved_min: 9.0,
-      review_changes_min: 6.0,
-      review_commented_min: 4.0,
-      files_overhead_per_review_min: 0.2,
-      day_drag_min: 7.0,
-      pr_assembly_min: 10.0,
-      approver_only_min: 10.0,
-      cycle_time_cap_ratio: 0.5,
+      review_approved_min: tuning::PR_REVIEW_APPROVED_MIN,
+      review_changes_min: tuning::PR_REVIEW_CHANGES_MIN,
+      review_commented_min: tuning::PR_REVIEW_COMMENTED_MIN,
+      files_overhead_per_review_min: tuning::PR_FILES_OVERHEAD_PER_REVIEW_MIN,
+      day_drag_min: tuning::PR_DAY_DRAG_MIN,
+      pr_assembly_min: tuning::PR_ASSEMBLY_MIN,
+      approver_only_min: tuning::PR_APPROVER_ONLY_MIN,
+      cycle_time_cap_ratio: tuning::PR_CYCLE_TIME_CAP_RATIO,
     }
   }
 }
@@ -246,10 +256,8 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
     }
   }
 
-  let ext_mix = (ext_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64)
-    / (tuning::COG_MAX_MIX_BUCKETS as f64);
-  let dir_mix = (dir_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64)
-    / (tuning::COG_MAX_MIX_BUCKETS as f64);
+  let ext_mix = (ext_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64) / (tuning::COG_MAX_MIX_BUCKETS as f64);
+  let dir_mix = (dir_set.len().min(tuning::COG_MAX_MIX_BUCKETS) as f64) / (tuning::COG_MAX_MIX_BUCKETS as f64);
   let balanced_edit = if total_lines > 0.0 {
     let add_ratio = (total_add as f64 / total_lines).clamp(0.0, 1.0);
     1.0 - ((add_ratio - tuning::BALANCE_CENTER).abs() * tuning::BALANCE_SHAPE)
@@ -257,15 +265,13 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
     0.0
   };
   // Normalize avg_lang_weight (1.0..1.25) to ~0..1 range
-  let lang_complexity = ((avg_lang_weight - tuning::LANG_COMPLEXITY_BASE)
-    / tuning::LANG_COMPLEXITY_SPAN)
-    .clamp(0.0, 1.0);
+  let lang_complexity =
+    ((avg_lang_weight - tuning::LANG_COMPLEXITY_BASE) / tuning::LANG_COMPLEXITY_SPAN).clamp(0.0, 1.0);
 
-  let cognitive_index =
-    weights.cog_ext_mix_coeff * ext_mix +
-    weights.cog_dir_mix_coeff * dir_mix +
-    weights.cog_balanced_edit_coeff * balanced_edit +
-    weights.cog_lang_complexity_coeff * lang_complexity;
+  let cognitive_index = weights.cog_ext_mix_coeff * ext_mix
+    + weights.cog_dir_mix_coeff * dir_mix
+    + weights.cog_balanced_edit_coeff * balanced_edit
+    + weights.cog_lang_complexity_coeff * lang_complexity;
 
   let cognitive_minutes = weights.cognitive_base_min * cognitive_index;
   minutes += cognitive_minutes;
