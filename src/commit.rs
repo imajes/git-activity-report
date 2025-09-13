@@ -28,6 +28,7 @@ pub struct ProcessContext<'a> {
   pub github_prs: bool,
   pub include_patch: bool,
   pub max_patch_bytes: usize,
+  pub estimate_effort: bool,
 }
 
 /// Sums additions and deletions across a slice of `FileEntry`s.
@@ -159,6 +160,11 @@ pub fn build_commit_object(sha: &str, context: &ProcessContext) -> Result<Commit
     patch_clipped: None,
     patch_lines: None,
     body_lines: None,
+    estimated_minutes: None,
+    estimated_minutes_min: None,
+    estimated_minutes_max: None,
+    estimate_confidence: None,
+    estimate_basis: None,
     github: None,
   };
 
@@ -182,6 +188,16 @@ pub fn process_commit(sha: &str, context: &ProcessContext) -> Result<Commit> {
 
   if !commit.body.is_empty() {
     commit.body_lines = Some(commit.body.lines().map(String::from).collect());
+  }
+
+  if context.estimate_effort {
+    let e = crate::enrichment::effort::estimate_commit_effort(&commit);
+
+    commit.estimated_minutes = Some(e.minutes);
+    commit.estimated_minutes_min = Some(e.min_minutes);
+    commit.estimated_minutes_max = Some(e.max_minutes);
+    commit.estimate_confidence = Some(e.confidence as f64);
+    commit.estimate_basis = Some(e.basis);
   }
 
   Ok(commit)

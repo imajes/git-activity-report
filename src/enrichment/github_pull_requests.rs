@@ -211,6 +211,11 @@ pub fn enrich_with_github_prs_with_api(commit: &mut Commit, repo: &str, api: &dy
       change_request_count: None,
       time_to_first_review_seconds: None,
       time_to_merge_seconds: None,
+      estimated_minutes: None,
+      estimated_minutes_min: None,
+      estimated_minutes_max: None,
+      estimate_confidence: None,
+      estimate_basis: None,
     };
 
     out.push(item);
@@ -381,6 +386,11 @@ fn build_aggregated_pr(
     change_request_count,
     time_to_first_review_seconds,
     time_to_merge_seconds,
+    estimated_minutes: None,
+    estimated_minutes_min: None,
+    estimated_minutes_max: None,
+    estimate_confidence: None,
+    estimate_basis: None,
   }
 }
 
@@ -425,6 +435,11 @@ mod tests {
       patch_clipped: None,
       patch_lines: None,
       body_lines: None,
+      estimated_minutes: None,
+      estimated_minutes_min: None,
+      estimated_minutes_max: None,
+      estimate_confidence: None,
+      estimate_basis: None,
       github: None,
     };
     c.github = Some(CommitGithub {
@@ -450,6 +465,11 @@ mod tests {
         change_request_count: None,
         time_to_first_review_seconds: None,
         time_to_merge_seconds: None,
+        estimated_minutes: None,
+        estimated_minutes_min: None,
+        estimated_minutes_max: None,
+        estimate_confidence: None,
+        estimate_basis: None,
       }],
     });
     c

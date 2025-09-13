@@ -4,7 +4,7 @@
 .SH NAME
 git\-activity\-report \- Export Git activity to JSON (simple or sharded)
 .SH SYNOPSIS
-\fBgit\-activity\-report\fR [\fB\-\-repo\fR] [\fB\-\-month\fR] [\fB\-\-for\fR] [\fB\-\-since\fR] [\fB\-\-until\fR] [\fB\-\-simple\fR] [\fB\-\-full\fR] [\fB\-\-include\-merges\fR] [\fB\-\-include\-patch\fR] [\fB\-\-max\-patch\-bytes\fR] [\fB\-\-save\-patches\fR] [\fB\-\-split\-out\fR] [\fB\-\-out\fR] [\fB\-\-github\-prs\fR] [\fB\-\-include\-unmerged\fR] [\fB\-\-tz\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+\fBgit\-activity\-report\fR [\fB\-\-repo\fR] [\fB\-\-month\fR] [\fB\-\-for\fR] [\fB\-\-since\fR] [\fB\-\-until\fR] [\fB\-\-split\-apart\fR] [\fB\-\-detailed\fR] [\fB\-\-estimate\-effort\fR] [\fB\-\-include\-merges\fR] [\fB\-\-include\-patch\fR] [\fB\-\-max\-patch\-bytes\fR] [\fB\-\-save\-patches\fR] [\fB\-\-out\fR] [\fB\-\-github\-prs\fR] [\fB\-\-include\-unmerged\fR] [\fB\-\-tz\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
 .SH DESCRIPTION
 Export Git activity to JSON (simple or sharded)
 .SH OPTIONS
@@ -24,11 +24,14 @@ Custom since (Git approxidate ok); must be paired with \-\-until
 \fB\-\-until\fR \fI<UNTIL>\fR
 Custom until (exclusive); must be paired with \-\-since
 .TP
-\fB\-\-simple\fR
-Single JSON output (quick)
+\fB\-\-split\-apart\fR
+Split output into multiple files (per\-commit shards) and include an items index in the report
 .TP
-\fB\-\-full\fR
-Sharded output (per\-commit files + manifest)
+\fB\-\-detailed\fR
+Convenience: turn on all enrichment/detail flags (unmerged, github, patches, etc.)
+.TP
+\fB\-\-estimate\-effort\fR
+Compute effort estimates for commits and PRs (opt\-in)
 .TP
 \fB\-\-include\-merges\fR
 Include merge commits
@@ -42,11 +45,8 @@ Per\-commit patch cap (0 = no limit)
 \fB\-\-save\-patches\fR \fI<SAVE_PATCHES>\fR
 Directory to write .patch files (referenced in JSON)
 .TP
-\fB\-\-split\-out\fR \fI<SPLIT_OUT>\fR
-Base directory for sharded output (full mode). If omitted, auto\-named
-.TP
 \fB\-\-out\fR \fI<OUT>\fR [default: \-]
-File for \-\-simple (default stdout "\-")
+Output location: \- without `\-\-split\-apart` (single report): file path (default stdout "\-") \- with `\-\-split\-apart` or multi\-range runs: base directory (default: auto\-named temp dir)
 .TP
 \fB\-\-github\-prs\fR
 Try to enrich with GitHub PRs (quietly ignored if not available)
@@ -55,11 +55,7 @@ Try to enrich with GitHub PRs (quietly ignored if not available)
 Scan local branches for commits in the window not reachable from HEAD; include separately
 .TP
 \fB\-\-tz\fR \fI<TZ>\fR [default: local]
-Timezone for local ISO timestamps in output (label only)
-.br
-
-.br
-[\fIpossible values: \fRlocal, utc]
+Timezone for local ISO timestamps in output (label only) Timezone for local ISO timestamps in output: "local", "utc", or IANA zone like "America/Chicago"
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
