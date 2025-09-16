@@ -56,6 +56,7 @@ impl OverallManifest {
   pub fn write_to(&self, base_dir: &str) -> Result<std::path::PathBuf> {
     let path = std::path::Path::new(base_dir).join("manifest.json");
     std::fs::write(&path, serde_json::to_vec_pretty(&self.value)?)?;
+
     Ok(path)
   }
 

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[pre-commit] spacing audit (strict; non-gating)"
+bash scripts/spacing-audit.sh strict src || true
+
+echo "[pre-commit] running cargo fmt to apply formatting"
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "[pre-commit] cargo not found; skipping fmt" >&2
+  exit 0
+fi
+
+# Apply formatting changes in-place, then restage any changes
+cargo fmt --all
+
+if ! git diff --quiet -- .; then
+  echo "[pre-commit] formatting changed files; restaging..."
+  git add -A
+fi
+
+echo "[pre-commit] ok"
+

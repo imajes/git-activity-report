@@ -1,6 +1,6 @@
 {
 "repo": "/Users/james/Projects/git-activity-report/gar-rs",
-"generated_at": "2025-09-12T21-43-46",
+"generated_at": "2025-09-15T10-01-22",
 "modules": [
 {
 "file": "src/commit.rs",
@@ -147,6 +147,16 @@
 "role": "enrichment/namespace",
 "purpose": "Namespace for enrichment features (GitHub PRs, etc.)",
 "outputs": "Public submodules implementing specific enrichments"
+},
+{
+"file": "src/enrichment/effort.rs",
+"role": "enrichment/estimation",
+"purpose": "Pure helpers to estimate developer effort (minutes) from commit/PR features",
+"outputs": "EffortEstimate structs computed from in-memory model objects (no IO)",
+"invariants": [
+"Best-effort, explainable, and additive-only (no schema changes here)",
+"Deterministic math; bounded outputs; no panics"
+]
 }
 ]
 }

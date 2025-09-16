@@ -393,6 +393,7 @@ pub fn resolve_ranges(
   match window {
     crate::range_windows::WindowSpec::Month { ym } => {
       let (s, u) = month_bounds(ym)?;
+
       Ok(vec![LabeledRange {
         label: ym.clone(),
         since: s,
@@ -409,6 +410,7 @@ pub fn resolve_ranges(
         Ok(multi)
       } else {
         let (s, u) = for_phrase_bounds(phrase, now)?;
+
         Ok(vec![LabeledRange {
           label: "window".into(),
           since: s,

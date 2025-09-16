@@ -263,11 +263,13 @@ impl GithubApi for GithubHttpApi {
       let subject = msg.lines().next().unwrap_or("").to_string();
 
       if !sha.is_empty() {
-        out.push(PullRequestCommit {
+        let pr_commit = PullRequestCommit {
           short_sha: sha.chars().take(7).collect(),
           sha,
           subject,
-        });
+        };
+
+        out.push(pr_commit);
       }
     }
 
@@ -331,11 +333,13 @@ impl GithubApi for GithubEnvApi {
       let subject = msg.lines().next().unwrap_or("").to_string();
 
       if !sha.is_empty() {
-        out.push(PullRequestCommit {
+        let pr_commit = PullRequestCommit {
           short_sha: sha.chars().take(7).collect(),
           sha,
           subject,
-        });
+        };
+
+        out.push(pr_commit);
       }
     }
 
@@ -548,7 +552,6 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     out.push(item);
   }
 
-  // Finalize
   Ok(out)
 }
 
@@ -670,12 +673,14 @@ fn process_reviews(
     let mut user_type = classify_user(&login, Some(&assoc));
     let user_json = api.get_user_json(&login);
     let email = user_json.as_ref().and_then(|u| u.fetch("email").to::<String>());
+
     if user_type.as_str() == "unknown" {
       let is_bot_json = user_json
         .as_ref()
         .and_then(|u| u.fetch("type").to::<String>())
         .map(|t| t.eq_ignore_ascii_case("Bot"))
         .unwrap_or(false);
+
       if is_bot_json || login.ends_with("[bot]") {
         user_type = "bot".to_string();
       }
@@ -690,6 +695,7 @@ fn process_reviews(
   }
 
   let mut approver: Option<GithubUser> = None;
+
   if let Some(login) = latest_approved_login {
     let approver_email = api.get_user_json(&login).and_then(|u| u.fetch("email").to::<String>());
     let user_type = details

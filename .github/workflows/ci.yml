@@ -52,8 +52,8 @@ jobs:
       - name: Spacing - normal
         run: just audit-spacing
 
-      - name: Spacing - strict
-        run: just audit-spacing-strict
+      # Note: spacing audit is informational only; rustfmt is the gate.
+      # The strict spacing gate has been removed in favor of letting rustfmt win.
 
       - name: Build
         run: just build

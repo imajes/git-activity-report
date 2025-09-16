@@ -224,6 +224,7 @@ fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
 fn top_level_dir(path: &str) -> Option<&str> {
   let mut parts = path.split('/');
   let first = parts.next()?;
+
   if first.is_empty() || !path.contains('/') {
     None
   } else {
@@ -317,6 +318,7 @@ pub fn estimate_commit_effort(commit: &Commit) -> EffortEstimate {
 
   for f in &commit.files {
     let ext = f.file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+
     if !ext.is_empty() {
       ext_set.insert(ext);
     }
@@ -415,11 +417,13 @@ pub fn estimate_pr_effort(pr: &GithubPullRequest, range_commits: &[Commit]) -> E
   let mut overhead = params.pr_assembly_min; // PR assembly + description
 
   let (approved, changes, commented) = derive_review_counts(pr);
+
   if approved > 0 || changes > 0 || commented > 0 {
     overhead += approved as f64 * params.review_approved_min;
     overhead += changes as f64 * params.review_changes_min;
     overhead += commented as f64 * params.review_commented_min;
     let total_reviews = (approved + changes + commented) as usize;
+
     if total_reviews > 1 {
       let extra = total_reviews - 1;
       overhead += (files_total as f64) * params.files_overhead_per_review_min * (extra as f64);
