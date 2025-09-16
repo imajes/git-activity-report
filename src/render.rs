@@ -289,11 +289,13 @@ fn process_commit_range(params: &ReportParams, subdir: &Path, label: &str) -> Re
     let fname = write_commit_shard(subdir, &commit, &params.tz)?;
 
     // Accumulate manifest data
-    items.push(ManifestItem {
+    let item = ManifestItem {
       sha: commit.sha.clone(),
       file: Path::new(label).join(&fname).to_string_lossy().to_string(),
       subject: commit.subject.clone(),
-    });
+    };
+
+    items.push(item);
     let author_key = author_key_for(&commit.author);
     *authors.entry(author_key).or_insert(0) += 1;
     accumulate_summary_and_files(&commit, &mut summary, &mut files_touched);
@@ -369,13 +371,15 @@ fn process_unmerged_branches(params: &ReportParams, subdir: &Path, label: &str) 
     let (behind, ahead) = gitio::branch_ahead_behind(&params.repo, &branch)?;
     unmerged_activity.total_unmerged_commits += branch_items.len();
 
-    unmerged_activity.branches.push(BranchItems {
+    let branch_entry = BranchItems {
       name: branch.clone(),
       merged_into_head: gitio::branch_merged_into_head(&params.repo, &branch)?,
       ahead_of_head: ahead,
       behind_head: behind,
       items: branch_items,
-    });
+    };
+
+    unmerged_activity.branches.push(branch_entry);
   }
 
   Ok(unmerged_activity)

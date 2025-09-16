@@ -110,6 +110,9 @@ audit-spacing:
 audit-spacing-strict:
   bash scripts/spacing-audit.sh strict src
 
+audit-spacing-strict-gate:
+  bash scripts/spacing-audit.sh strict-gate src
+
 lint-md:
   markdownlint-cli2 --fix "**/*.md"
 

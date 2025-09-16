@@ -78,6 +78,7 @@ fn build_github_user(api: &dyn GithubApi, login: &str, assoc_opt: Option<&str>) 
 #[cfg(any(test, feature = "testutil"))]
 fn classify_assoc_local(a: &str) -> String {
   let s = a.to_ascii_uppercase();
+
   match s.as_str() {
     "OWNER" | "MEMBER" | "COLLABORATOR" => "member".into(),
     "CONTRIBUTOR" | "FIRST_TIME_CONTRIBUTOR" | "FIRST_TIMER" => "contributor".into(),
