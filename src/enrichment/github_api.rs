@@ -92,16 +92,17 @@ pub fn get_github_token() -> Option<String> {
 }
 
 fn get_json(url: &str, token: &str) -> Option<serde_json::Value> {
-  let agent = ureq::AgentBuilder::new().build();
+  let agent: ureq::Agent = ureq::Agent::config_builder().build().into();
+
   let resp = agent
     .get(url)
-    .set("Accept", "application/vnd.github+json")
-    .set("User-Agent", "git-activity-report")
-    .set("Authorization", &format!("Bearer {}", token))
+    .header("Accept", "application/vnd.github+json")
+    .header("User-Agent", "git-activity-report")
+    .header("Authorization", &format!("Bearer {}", token))
     .call();
 
   match resp {
-    Ok(r) => r.into_json().ok(),
+    Ok(mut r) => r.body_mut().read_json::<serde_json::Value>().ok(),
     Err(_) => None,
   }
 }

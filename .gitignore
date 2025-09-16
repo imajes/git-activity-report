@@ -29,3 +29,4 @@ real-output
 scratch
 /prompt-engineering
 .secrets
+.cargo-home/
