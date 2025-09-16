@@ -297,7 +297,6 @@ pub fn collect_pull_requests_for_commits_with_api(
     }
   }
 
-  // Finalize
   Some(out)
 }
 

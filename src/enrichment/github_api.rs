@@ -552,7 +552,6 @@ pub fn try_fetch_prs_for_commit(repo: &str, sha: &str) -> anyhow::Result<Vec<Git
     out.push(item);
   }
 
-  // Finalize
   Ok(out)
 }
 

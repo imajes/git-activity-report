@@ -24,6 +24,7 @@ _help:
   @echo "  check-headers   # verify module headers have purpose/role"
   @echo "  audit-spacing   # spacing/layout audit (normal)"
   @echo "  audit-spacing-strict # spacing/layout audit (strict)"
+  @echo "  style-fix       # run strict spacing audit (non-gating), then cargo fmt"
   @echo "  lint-md         # markdown lint"
   @echo "  ci-check        # verify cycle presence and headers (CI gate)"
   @echo "  clean           # clean build objects and data"
@@ -115,6 +116,11 @@ audit-spacing-strict-gate:
 
 lint-md:
   markdownlint-cli2 --fix "**/*.md"
+
+# Developer convenience: spacing audit (non-gating) followed by rustfmt write.
+style-fix:
+  bash scripts/spacing-audit.sh strict src || true
+  cargo fmt --all
 
 # Scaffold a new agent cycle log from TASK_TEMPLATE
 new-cycle desc="work-cycle":

@@ -5,7 +5,15 @@ MODE="${1:-normal}"
 ROOT="${2:-src}"
 HAD_FINDINGS=0
 
-echo "[spacing-audit] mode=$MODE root=$ROOT"
+# Prefer GNU awk if available (more consistent regex/behavior),
+# but fall back to the system awk (e.g., macOS/BSD awk).
+if command -v gawk >/dev/null 2>&1; then
+  AWK="gawk"
+else
+  AWK="awk"
+fi
+
+echo "[spacing-audit] mode=$MODE root=$ROOT awk=$AWK"
 
 run_normal() {
   echo "-- decl→ctrl without blank (phase boundary)"
@@ -23,7 +31,7 @@ run_strict() {
 
   echo "-- post-block → new control without blank (not else-sibling)"
   find "$ROOT" -name "*.rs" -print0 | while IFS= read -r -d '' f; do
-    awk '
+    "$AWK" '
       { lines[NR] = $0 }
       END {
         for (i = 1; i <= NR; i++) {
@@ -53,13 +61,14 @@ run_strict() {
 
   echo "-- finalization (Ok(...)/return) directly after code without blank"
   find "$ROOT" -name "*.rs" -print0 | while IFS= read -r -d '' f; do
-    awk '
+    "$AWK" '
       { lines[NR] = $0 }
       END {
         for (i = 2; i <= NR; i++) {
           cur = lines[i]; prev = lines[i-1]
           ctrim = cur; gsub(/^\s+|\s+$/, "", ctrim)
-          if (ctrim ~ /^(return\b|Ok\()/) {
+          # Only treat Ok(...) as finalization when not a match arm (which contains "=>").
+          if (ctrim ~ /^return\b/ || (ctrim ~ /^Ok\(/ && ctrim !~ /=>/)) {
             if (prev !~ /^\s*$/) {
               ptrim = prev; gsub(/^\s+|\s+$/, "", ptrim)
               printf("FINALIZE: %s:%d:  %s\n", FILENAME, i-1, ptrim)
@@ -84,7 +93,7 @@ check_gate_strict() {
   tmpfile=$(mktemp)
   # post-block → new control
   find "$ROOT" -name "*.rs" -print0 | while IFS= read -r -d '' f; do
-    awk '
+    "$AWK" '
       { lines[NR] = $0 }
       END {
         for (i = 1; i <= NR; i++) {
@@ -112,15 +121,15 @@ check_gate_strict() {
   rm -f "$tmpfile"
 
   tmpfile2=$(mktemp)
-  # finalization directly after code without blank
+  # finalization directly after code without blank (exclude match-arm patterns)
   find "$ROOT" -name "*.rs" -print0 | while IFS= read -r -d '' f; do
-    awk '
+    "$AWK" '
       { lines[NR] = $0 }
       END {
         for (i = 2; i <= NR; i++) {
           cur = lines[i]; prev = lines[i-1]
           ctrim = cur; gsub(/^\s+|\s+$/, "", ctrim)
-          if (ctrim ~ /^(return\b|Ok\()/) {
+          if (ctrim ~ /^return\b/ || (ctrim ~ /^Ok\(/ && ctrim !~ /=>/)) {
             if (prev !~ /^\s*$/) {
               printf("FINALIZE: %s:%d\n", FILENAME, i)
             }
