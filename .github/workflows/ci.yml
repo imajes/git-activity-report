@@ -60,7 +60,7 @@ jobs:
 
       - name: Generate man page
         run: |
-          just man
+          just build-manfile
           test -s docs/man/git-activity-report.1
 
       - name: Tests (nextest + coverage)
